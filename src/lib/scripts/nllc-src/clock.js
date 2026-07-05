@@ -25,6 +25,11 @@ export class NLLCClock {
         this.units.push(unit);
     };
 
+    removeUnit(unit) {
+        const index = this.units.indexOf(unit);
+        if (index !== -1) this.units.splice(index, 1);
+    };
+
     start() {
         if (this.running) return;
         this.running = true;

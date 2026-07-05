@@ -3,20 +3,15 @@ function midiToFreq(midi) {
 };
 
 export class NLLCSynth {
-    constructor(audioContext, destination, { name = "synth" } = {}) {
+    constructor(audioContext, { name = "synth" } = {}) {
         this.llm_summary = "The basic synth class.";
         this.name = name;
 
         this.audioContext = audioContext;
         this.output = audioContext.createGain();
-        this.output.connect(destination.input ?? destination);
 
         this.events = [];
         this.automation = [];
-    };
-
-    get volume() {
-        return this.output.gain;
     };
 
     addEvent(event) {

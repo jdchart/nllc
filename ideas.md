@@ -1,0 +1,2 @@
+- clicking on an item in mixer pastes that thing into at thte current cursor
+- code suggestions

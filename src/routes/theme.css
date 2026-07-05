@@ -22,3 +22,26 @@ html, body {
     color: var(--nllc-text);
     font-family: var(--nllc-font-ui);
 }
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--nllc-border) transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: var(--nllc-border);
+    border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--nllc-text-dim);
+}

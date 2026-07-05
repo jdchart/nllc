@@ -2,30 +2,62 @@
     import { onMount } from "svelte";
     import CodeEditor from "$lib/components/code-editor/CodeEditor.svelte";
     import Mixer from "$lib/components/mixer/Mixer.svelte";
+    import CollapsedRail from "$lib/components/mixer/CollapsedRail.svelte";
     import { NLLC } from "$lib/scripts/nllc-src/nllc";
     import { NLLCEvent } from "$lib/scripts/nllc-src/event";
     import { NLLCAutomationEvent } from "$lib/scripts/nllc-src/automation";
+    import { createCommandRouter } from "$lib/scripts/nllc-src/commands";
 
     let nllc_instance = $state(null);
-    let synths = $state([]);
+    let tracks = $state([]);
+    let executeCommand = $state((text) => `unrecognized: "${text}" (engine not ready yet)`);
+
+    let mixerVisible = $state(true);
+    let mixerWidth = $state(360);
+    let resizing = $state(false);
+
+    function startResize(event) {
+        if (!mixerVisible) return;
+        event.preventDefault();
+
+        const startX = event.clientX;
+        const startWidth = mixerWidth;
+        resizing = true;
+
+        function onMove(moveEvent) {
+            mixerWidth = Math.min(800, Math.max(220, startWidth + (startX - moveEvent.clientX)));
+        };
+
+        function onUp() {
+            resizing = false;
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+        };
+
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+    };
 
     // NLLC touches AudioContext, which doesn't exist during SSR,
     // so it's constructed client-side only, inside onMount.
     onMount(() => {
         const nllc = new NLLC();
 
-        const reverb = nllc.createReverb({ wet: 0.35 });
-        const synth = nllc.createSynth(reverb, { name: "lead" });
+        const track = nllc.createTrack({ name: "track_1" });
+        const reverb = nllc.createProcessor("reverb", { wet: 0.35 });
+        track.addProcessor(reverb);
+
+        const synth = track.source;
 
         [0, 1, 2, 3].forEach((beat) => {
             synth.addEvent(new NLLCEvent({ beat, pitch: 48 + beat * 2, velocity: 0.5, duration: 0.5 }));
         });
 
-        // fade the synth in over the first 4 beats, then hold at full volume
-        synth.addAutomation(new NLLCAutomationEvent({
+        // fade the track in over the first 4 beats, then hold at full volume
+        track.addAutomation(new NLLCAutomationEvent({
             beat: 0,
             duration: 4,
-            target: synth.volume,
+            target: track.volume,
             from: 0,
             to: 1,
             curve: "linear",
@@ -44,21 +76,57 @@
         }));
 
         nllc_instance = nllc;
-        synths = nllc.synths;
-    });
+        tracks = [...nllc.tracks];
+        executeCommand = createCommandRouter(nllc);
 
-    function handleCommand(text) {
-        return `unrecognized: "${text}" (LLM routing not wired up yet)`;
-    };
+        // nllc.tracks is a plain (non-reactive) array mutated by /add_track and
+        // /track_1 remove_self; poll and diff so the mixer picks up the change,
+        // same pattern MixerChannel already uses for its processor list.
+        let trackNames = nllc.tracks.map((t) => t.name).join(",");
+        let rafId;
+        const pollTracks = () => {
+            const names = nllc.tracks.map((t) => t.name).join(",");
+            if (names !== trackNames) {
+                trackNames = names;
+                tracks = [...nllc.tracks];
+            }
+            rafId = requestAnimationFrame(pollTracks);
+        };
+        pollTracks();
+
+        return () => cancelAnimationFrame(rafId);
+    });
 </script>
 
 <div class="layout">
     <div class="console-pane">
-        <CodeEditor onCommand={handleCommand} />
+        <CodeEditor onCommand={executeCommand} />
     </div>
-    <div class="mixer-pane">
+
+    <div
+        class="divider"
+        role="separator"
+        aria-orientation="vertical"
+        onpointerdown={startResize}
+        class:collapsed={!mixerVisible}
+    >
+        <button
+            class="collapse-toggle"
+            onclick={() => mixerVisible = !mixerVisible}
+            onpointerdown={(event) => event.stopPropagation()}
+            aria-label={mixerVisible ? "Hide mixer" : "Show mixer"}
+        >
+            {mixerVisible ? "›" : "‹"}
+        </button>
+    </div>
+
+    <div class="mixer-pane" class:resizing style="width: {mixerVisible ? mixerWidth : 44}px">
         {#if nllc_instance}
-            <Mixer audioContext={nllc_instance.audioContext} master={nllc_instance.master} {synths} />
+            {#if mixerVisible}
+                <Mixer nllc={nllc_instance} {tracks} />
+            {:else}
+                <CollapsedRail nllc={nllc_instance} />
+            {/if}
         {/if}
     </div>
 </div>
@@ -72,11 +140,42 @@
     .console-pane {
         flex: 1;
         min-width: 0;
-        border-right: 1px solid var(--nllc-border);
+    }
+
+    .divider {
+        flex-shrink: 0;
+        width: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--nllc-border);
+        cursor: col-resize;
+    }
+
+    .divider.collapsed {
+        cursor: pointer;
+    }
+
+    .collapse-toggle {
+        width: 18px;
+        height: 40px;
+        border: 1px solid var(--nllc-border);
+        background: var(--nllc-panel-bg);
+        color: var(--nllc-text-dim);
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        line-height: 1;
     }
 
     .mixer-pane {
-        flex: 1;
+        flex-shrink: 0;
         min-width: 0;
+        overflow: hidden;
+        transition: width 150ms ease;
+    }
+
+    .mixer-pane.resizing {
+        transition: none;
     }
 </style>

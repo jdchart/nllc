@@ -16,8 +16,8 @@ function buildImpulseResponse(audioContext, duration, decay) {
 };
 
 export class NLLCReverb extends NLLCProcessor {
-    constructor(audioContext, { duration = 2.5, decay = 3, wet = 0.3 } = {}) {
-        super(audioContext);
+    constructor(audioContext, { name = "reverb", duration = 2.5, decay = 3, wet = 0.3 } = {}) {
+        super(audioContext, { name });
         this.llm_summary = "A simple algorithmic reverb: convolution against a generated impulse response, added on top of the dry signal.";
 
         this.convolver = audioContext.createConvolver();
@@ -30,6 +30,13 @@ export class NLLCReverb extends NLLCProcessor {
         this.input.connect(this.convolver);
         this.convolver.connect(this.wetGain);
         this.wetGain.connect(this.output);
+
+        this.params = {
+            wet: {
+                get: () => this.wetGain.gain.value,
+                set: (value) => { this.wetGain.gain.value = value; },
+            },
+        };
     };
 
     get wet() {
