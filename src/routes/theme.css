@@ -1,3 +1,7 @@
+/* The app's single theme, expressed entirely as custom properties consumed by
+   every component's <style> block. Swapping the look of the app (a stated
+   project goal) means replacing/overriding just this file's variable values —
+   no component styles should hardcode colors/fonts outside of these. */
 :root {
     --nllc-bg: #16181c;
     --nllc-panel-bg: #1f2227;

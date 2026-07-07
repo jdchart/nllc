@@ -1,5 +1,8 @@
 import { positionToGain, gainToPosition } from "./taper";
 
+// Coerces a raw parsed token into a number, boolean, or (quote-stripped)
+// string. Falls through to the raw string for anything else (e.g. a bare
+// type name like `sampler` in `synth=sampler`).
 function parseValue(raw) {
     if (/^-?\d+(\.\d+)?$/.test(raw)) return Number(raw);
     if (raw === "true") return true;
@@ -12,6 +15,7 @@ function parseValue(raw) {
 
 // Parses "/name" or "/name param=val param2=val2" into { name, params }.
 // Values are bare (no spaces) or quoted (may contain spaces): param="foo bar".
+// Whitespace around "=" is optional: "param = val" and "param =val" both work.
 export function parseCommand(text) {
     const match = text.trim().match(/^\/([a-zA-Z_]\w*)(?:\s+([\s\S]*))?$/);
     if (!match) {
@@ -23,7 +27,7 @@ export function parseCommand(text) {
 
     if (argsText) {
         // A bare token with no "=" (e.g. "help") is a boolean flag: params.help = true.
-        const pairPattern = /([a-zA-Z_]\w*)(?:=("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\S*))?/g;
+        const pairPattern = /([a-zA-Z_]\w*)(?:\s*=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\S*))?/g;
         let cursor = 0;
         let pair;
         while ((pair = pairPattern.exec(argsText))) {
@@ -50,21 +54,27 @@ function formatValue(value) {
     return typeof value === "number" ? value.toFixed(3) : String(value);
 };
 
+// Builds the one-line status string for a channel (master or a track), shown
+// both for `/track_1` with no params and inside `/tracks`.
 function channelSummary(channel) {
     const gain = `gain=${gainToPosition(channel.volume.value).toFixed(2)}`;
     const pan = `pan=${channel.pan.value.toFixed(2)}`;
     const inserts = channel.processors.length
         ? channel.processors.map((p) => `${p.id}:${p.name}${p.active ? "" : "(off)"}`).join(", ")
         : "none";
-    // For now the source can't be changed or introspected further, but surface
-    // what it is so this is a natural place for that control to grow into.
-    const synth = channel.source ? ` synth=${channel.source.name}("${channel.source.llm_summary}")` : "";
+    // For now the source can't be introspected further, but surface what it
+    // is so this is a natural place for that control to grow into.
+    const synth = channel.source
+        ? ` synth=${channel.source.name}("${channel.source.llm_summary}")${channel.source.active ? "" : " (stopped)"}`
+        : "";
     return `${channel.name} — ${gain} ${pan} inserts=[${inserts}]${synth}`;
 };
 
 // Every track (and master) is addressable by its own name, e.g. /track_1 gain=0.5.
 // gain is a 0-1 position, exponentially tapered onto the actual AudioParam; pan is
 // linear -1..1. add_processor/remove_processor manage the insert chain at runtime.
+// start/stop pause a track's own synth (its events stop scheduling) without touching
+// routing; master has no synth, so start/stop/synth are no-ops there.
 function channelCommand(nllc, channel, params) {
     if (Object.keys(params).length === 0) return channelSummary(channel);
 
@@ -88,6 +98,37 @@ function channelCommand(nllc, channel, params) {
         results.push(`pan set to ${clamped.toFixed(2)}`);
     }
 
+    if (params.start) {
+        if (!channel.source) {
+            results.push("master cannot be started/stopped");
+        } else {
+            channel.source.active = true;
+            results.push(`${channel.name} started`);
+        }
+    }
+
+    if (params.stop) {
+        if (!channel.source) {
+            results.push("master cannot be started/stopped");
+        } else {
+            channel.source.active = false;
+            results.push(`${channel.name} stopped`);
+        }
+    }
+
+    if ("synth" in params) {
+        if (!channel.source) {
+            results.push("master has no synth");
+        } else {
+            try {
+                nllc.setTrackSynth(channel, params.synth);
+                results.push(`synth set to ${params.synth}`);
+            } catch (error) {
+                results.push(error.message);
+            }
+        }
+    }
+
     if ("add_processor" in params) {
         const processor = nllc.createProcessor(params.add_processor);
         channel.addProcessor(processor);
@@ -105,6 +146,8 @@ function channelCommand(nllc, channel, params) {
 };
 
 // A processor is addressable by its own name, e.g. /reverb wet=0.5 or /reverb help.
+// Generic over whatever `processor.params` the concrete processor class
+// exposes — this function has no per-type knowledge of reverb/delay/etc.
 function processorCommand(nllc, processor, params) {
     if (params.remove_self) {
         nllc.removeProcessor(processor);
@@ -130,6 +173,10 @@ function processorCommand(nllc, processor, params) {
     return `${processor.name}: ${results.join(", ")}`;
 };
 
+// Builds the single executeCommand(text) function the UI calls for every
+// console submission. Closes over one NLLC instance; holds no state of its
+// own, since dispatch (track/processor name lookup) is re-resolved on every
+// call against the live nllc.tracks/nllc.processors arrays.
 export function createCommandRouter(nllc) {
     const commands = {
         start: () => {
@@ -144,8 +191,15 @@ export function createCommandRouter(nllc) {
             const track = nllc.createTrack(params);
             return `created ${track.name}`;
         },
+        tracks: () => {
+            if (nllc.tracks.length === 0) return "no tracks";
+            return nllc.tracks.map((track) => channelSummary(track)).join("\n");
+        },
     };
 
+    // Wraps a handler so a thrown error becomes a console-printable string
+    // instead of crashing the session — handlers don't need their own
+    // try/catch.
     function run(name, handler, params) {
         try {
             return handler(params) ?? "";
@@ -154,6 +208,8 @@ export function createCommandRouter(nllc) {
         }
     };
 
+    // Dispatch order: built-in top-level commands, then master, then a
+    // matching track name, then a matching processor name.
     return function executeCommand(text) {
         if (!text.trim().startsWith("/")) {
             return `unrecognized: "${text}" (commands must start with /)`;

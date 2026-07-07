@@ -1,2 +1,4 @@
+- allow for /track_1 gain=0,2 or /track_1 pan = -1, 4b
+- perhaps /track_1 gain=lfo 2 -1 1 (also get advice on syntax)
 - clicking on an item in mixer pastes that thing into at thte current cursor
 - code suggestions

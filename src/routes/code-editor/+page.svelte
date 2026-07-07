@@ -4,7 +4,6 @@
     import Mixer from "$lib/components/mixer/Mixer.svelte";
     import CollapsedRail from "$lib/components/mixer/CollapsedRail.svelte";
     import { NLLC } from "$lib/scripts/nllc-src/nllc";
-    import { NLLCEvent } from "$lib/scripts/nllc-src/event";
     import { NLLCAutomationEvent } from "$lib/scripts/nllc-src/automation";
     import { createCommandRouter } from "$lib/scripts/nllc-src/commands";
 
@@ -46,12 +45,6 @@
         const track = nllc.createTrack({ name: "track_1" });
         const reverb = nllc.createProcessor("reverb", { wet: 0.35 });
         track.addProcessor(reverb);
-
-        const synth = track.source;
-
-        [0, 1, 2, 3].forEach((beat) => {
-            synth.addEvent(new NLLCEvent({ beat, pitch: 48 + beat * 2, velocity: 0.5, duration: 0.5 }));
-        });
 
         // fade the track in over the first 4 beats, then hold at full volume
         track.addAutomation(new NLLCAutomationEvent({

@@ -1,5 +1,9 @@
 import { NLLCProcessor } from "./processor";
 
+// A stereo ping-pong delay: independent left/right delay lines whose feedback
+// crosses to the *opposite* channel (L's tail feeds R's delay line and vice
+// versa) rather than back into itself, plus a small time offset on the right
+// channel for stereo width. Dry signal always passes straight through.
 export class NLLCDelay extends NLLCProcessor {
     constructor(audioContext, { name = "delay", time = 0.375, feedback = 0.35, wet = 0.3, stereoOffset = 0.06 } = {}) {
         super(audioContext, { name });
@@ -42,6 +46,7 @@ export class NLLCDelay extends NLLCProcessor {
         merger.connect(this.wetGain);
         this.wetGain.connect(this.output);
 
+        // Console/UI-facing control surface (see commands.js's processorCommand).
         this.params = {
             time: {
                 get: () => this.delayL.delayTime.value,
@@ -64,6 +69,8 @@ export class NLLCDelay extends NLLCProcessor {
         };
     };
 
+    // Raw AudioParam accessors, so these params can also be used as
+    // NLLCAutomationEvent targets (ramped over time), not just set instantly.
     get time() {
         return this.delayL.delayTime;
     };

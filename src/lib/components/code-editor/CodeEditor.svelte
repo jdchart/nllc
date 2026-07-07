@@ -1,4 +1,8 @@
 <script>
+    // The console: a scrollback log plus a single-line input. Purely a view —
+    // it has no idea what a command means, it just calls `onCommand(text)`
+    // (createCommandRouter's executeCommand, wired up by the parent page) and
+    // logs whatever string comes back.
     let { onCommand = () => {} } = $props();
 
     let log = $state([]);
@@ -27,6 +31,9 @@
         }
     };
 
+    // Deferred to the next frame so it runs after Svelte has actually
+    // rendered the newly-pushed log line (scrollHeight would be stale
+    // otherwise).
     function queueScroll() {
         requestAnimationFrame(() => {
             if (logEl) logEl.scrollTop = logEl.scrollHeight;

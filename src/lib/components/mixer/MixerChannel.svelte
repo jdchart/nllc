@@ -17,6 +17,11 @@
     let processorIds = $state("");
     let processorList = $state([]);
 
+    // Single rAF loop drives the level meter, keeps the fader/pan reflecting
+    // external changes (console commands, automation), and polls this
+    // channel's processor list for additions/removals/bypass toggles — all
+    // three read off the live channel object rather than Svelte state, since
+    // NLLC/NLLCChannel mutate their own arrays and AudioParams directly.
     $effect(() => {
         const analyser = audioContext.createAnalyser();
         analyser.fftSize = 256;

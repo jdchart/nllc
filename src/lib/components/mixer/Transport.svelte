@@ -4,6 +4,10 @@
     let running = $state(false);
     let beat = $state(0);
 
+    // nllc.running/nllc.clock aren't Svelte state (they're mutated by plain
+    // NLLC/NLLCClock methods, not component code), so this polls them every
+    // frame and recomputes the current beat from the clock's own precise
+    // AudioContext-time bookkeeping rather than tracking beats independently.
     $effect(() => {
         let rafId;
 
@@ -27,6 +31,8 @@
         }
     };
 
+    // Loop-relative beat position (double modulo to stay positive), and an LED
+    // that fades out across each beat so it visibly pulses with the tempo.
     const loopBeat = $derived(
         ((beat % nllc.clock.loopLengthBeats) + nllc.clock.loopLengthBeats) % nllc.clock.loopLengthBeats
     );

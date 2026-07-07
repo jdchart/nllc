@@ -1,3 +1,8 @@
+// A scheduled ramp of a real Web Audio AudioParam (e.g. a channel's `volume`,
+// a processor's `wet`), added to a channel's or processor's `automation` list
+// the same way an NLLCEvent is added to a synth's `events` list. The clock
+// calls scheduleAutomationEvent() directly for these — there's no `trigger()`
+// step, since ramping an AudioParam is generic across every target.
 export class NLLCAutomationEvent {
     constructor({ beat, duration, target, from, to, curve = "linear", once = false }) {
         this.beat = beat;
@@ -11,6 +16,11 @@ export class NLLCAutomationEvent {
     };
 };
 
+// Applies one automation event's ramp to its target AudioParam starting at
+// `time`. `curve` selects the ramp shape: "linear" (constant rate),
+// "exponential" (clamped away from 0, since exponential ramps can't reach it),
+// or "target" (an asymptotic approach via setTargetAtTime, using a quarter of
+// the event's duration as the time constant for a smoother settle).
 export function scheduleAutomationEvent(time, event, secondsPerBeat) {
     const endTime = time + event.duration * secondsPerBeat;
     const param = event.target;

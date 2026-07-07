@@ -1,4 +1,9 @@
 <script>
+    // The full mixer pane: a transport strip, one MixerChannel per track, and
+    // a master strip. Purely a read/write view onto the live NLLC graph
+    // (each MixerChannel operates directly on its channel's real Web Audio
+    // nodes) — `tracks` is handed down from the parent page, which is the one
+    // place polling nllc.tracks for additions/removals.
     import MixerChannel from "./MixerChannel.svelte";
     import Transport from "./Transport.svelte";
 

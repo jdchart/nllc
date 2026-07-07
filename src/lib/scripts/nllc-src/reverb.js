@@ -1,5 +1,8 @@
 import { NLLCProcessor } from "./processor";
 
+// Generates a synthetic impulse response: exponentially-decaying white noise
+// per channel (not a recorded space). `decay` is the exponent of the falloff
+// curve — higher values decay faster near the start of the buffer.
 function buildImpulseResponse(audioContext, duration, decay) {
     const rate = audioContext.sampleRate;
     const length = Math.max(1, Math.floor(rate * duration));
@@ -15,6 +18,8 @@ function buildImpulseResponse(audioContext, duration, decay) {
     return impulse;
 };
 
+// A convolution reverb: the dry signal always passes straight through, in
+// parallel with a wet path convolved against a generated impulse response.
 export class NLLCReverb extends NLLCProcessor {
     constructor(audioContext, { name = "reverb", duration = 2.5, decay = 3, wet = 0.3 } = {}) {
         super(audioContext, { name });
@@ -26,11 +31,13 @@ export class NLLCReverb extends NLLCProcessor {
         this.wetGain = audioContext.createGain();
         this.wetGain.gain.value = wet;
 
+        // dry passthrough, in parallel with the wet (convolved) path
         this.input.connect(this.output);
         this.input.connect(this.convolver);
         this.convolver.connect(this.wetGain);
         this.wetGain.connect(this.output);
 
+        // Console/UI-facing control surface (see commands.js's processorCommand).
         this.params = {
             wet: {
                 get: () => this.wetGain.gain.value,
@@ -39,6 +46,8 @@ export class NLLCReverb extends NLLCProcessor {
         };
     };
 
+    // Raw AudioParam accessor, so `wet` can also be used as an
+    // NLLCAutomationEvent target (ramped over time), not just set instantly.
     get wet() {
         return this.wetGain.gain;
     };

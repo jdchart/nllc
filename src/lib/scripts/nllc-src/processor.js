@@ -1,3 +1,7 @@
+// Base class for every effect (see reverb.js, delay.js). A processor sits
+// continuously in a channel's insert chain, wiring real DSP nodes between the
+// inherited `this.input`/`this.output`. Unlike a synth, there's no per-event
+// trigger — subclasses build their node graph once, in the constructor.
 export class NLLCProcessor {
     constructor(audioContext, { name = "processor" } = {}) {
         this.llm_summary = "The basic processor class.";
@@ -22,6 +26,9 @@ export class NLLCProcessor {
         return event;
     };
 
+    // Direct-connects this processor's output to another node. Channels don't
+    // normally call this themselves (NLLCChannel._rewireChain wires processors
+    // into the chain directly) — it exists for standalone/manual wiring.
     connect(destination) {
         this.output.connect(destination.input ?? destination);
         return destination;

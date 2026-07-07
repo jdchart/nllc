@@ -1,4 +1,7 @@
 <script>
+    // A minimized stand-in for the full Mixer pane (shown when the user
+    // collapses it): just the master power button, clock LED, and level
+    // meter, so playback stays controllable/visible without the full strips.
     let { nllc } = $props();
 
     let level = $state(0);
