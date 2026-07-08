@@ -20,9 +20,10 @@ white noise through a low-pass filter, with one runtime param (`rate`, the
 filter's cutoff — higher values wobble faster/rougher):
 
 ```js
-// src/lib/scripts/nllc-src/noisemod.js
-import { NLLCModulator } from "./modulator";
-import { NLLCParam } from "./param";
+// src/lib/scripts/nllc-src/modulators/noisemod.js — non-base modulators
+// live in their own modulators/ subfolder, one level down from the base classes.
+import { NLLCModulator } from "../modulator";
+import { NLLCParam } from "../param";
 
 // A short buffer of white noise, looped continuously — same technique
 // reverb.js uses for its impulse response, just looped instead of one-shot.
@@ -61,8 +62,8 @@ export class NLLCNoiseModulator extends NLLCModulator {
 };
 ```
 
-Points worth noting, all copied from `lfo.js` (and, since a modulator is a
-processor's sibling, `reverb.js`/`delay.js`):
+Points worth noting, all copied from `modulators/lfo.js` (and, since a modulator is a
+processor's sibling, `processors/reverb.js`/`processors/delay.js`):
 
 - **`this.output` is provided by the base class** (a plain `GainNode`) —
   connect your node graph's final stage into it; never create your own
@@ -97,7 +98,7 @@ processor's sibling, `reverb.js`/`delay.js`):
 
 ```js
 // nllc.js
-import { NLLCNoiseModulator } from "./noisemod";
+import { NLLCNoiseModulator } from "./modulators/noisemod";
 
 const MODULATOR_TYPES = {
     lfo: NLLCLFO,

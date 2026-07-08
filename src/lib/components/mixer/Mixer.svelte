@@ -12,7 +12,7 @@
     import ModulatorStrip from "./ModulatorStrip.svelte";
     import PatchList from "./PatchList.svelte";
 
-    let { nllc, tracks = [], modulators = [], patches = [] } = $props();
+    let { nllc, tracks = [], buses = [], modulators = [], patches = [] } = $props();
 </script>
 
 <div class="mixer">
@@ -26,6 +26,19 @@
             <div class="strips">
                 {#each tracks as track (track)}
                     <MixerChannel label={track.name} audioContext={nllc.audioContext} channel={track} />
+                {/each}
+            </div>
+        {/if}
+    </div>
+
+    <div class="buses-section">
+        <div class="title">Buses</div>
+        {#if buses.length === 0}
+            <div class="empty">none</div>
+        {:else}
+            <div class="strips">
+                {#each buses as bus (bus)}
+                    <MixerChannel label={bus.name} audioContext={nllc.audioContext} channel={bus} />
                 {/each}
             </div>
         {/if}
@@ -82,6 +95,13 @@
         display: flex;
         flex-direction: column;
         flex: 1;
+    }
+
+    .buses-section {
+        display: flex;
+        flex-direction: column;
+        border-left: 1px solid var(--nllc-border);
+        padding-left: 1rem;
     }
 
     .strips {

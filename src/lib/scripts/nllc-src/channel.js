@@ -20,6 +20,13 @@ export class NLLCChannel {
         this.processors = [];
         this.automation = [];
 
+        // Every place this channel's post-fader signal is currently being fed
+        // — see addSend/removeSend/connect below. Independent of the insert
+        // chain (_rewireChain never touches these; they hang off gainNode,
+        // downstream of it).
+        this.sends = [];
+        this._sendIdCounter = 0;
+
         // Console/UI-facing control surface (see commands.js's applyParams) —
         // gain is a 0-1 position, exponentially tapered onto the actual
         // (also 0-1) AudioParam value for perceptually-even steps; pan is
@@ -54,13 +61,50 @@ export class NLLCChannel {
         return event;
     };
 
-    // Connects this channel's output to another channel (or a raw AudioNode,
-    // e.g. audioContext.destination). Disconnects any previous destination
-    // first, since a channel only ever feeds one place downstream.
-    connect(destination) {
-        this.gainNode.disconnect();
-        this.gainNode.connect(destination.input ?? destination);
-        return destination;
+    // Adds one more feed from this channel's post-fader signal to
+    // `destination` (another channel, e.g. a bus/master, or a raw AudioNode),
+    // through its own gain — independent of every other send this channel
+    // already has, so the same signal can feed several places at once at
+    // different levels (e.g. dry to master, a wet send to a reverb bus).
+    // `destName` is only for display (see channelSummary/patchSummary-style
+    // reporting); it's whatever name the caller resolved `destination` from.
+    addSend(destination, { destName, gain = 1 } = {}) {
+        if (destination === this) {
+            throw new Error(`"${this.name}" cannot send to itself`);
+        }
+
+        const sendGain = this.audioContext.createGain();
+        sendGain.gain.value = gain;
+        this.gainNode.connect(sendGain);
+        sendGain.connect(destination.input ?? destination);
+
+        const send = {
+            id: `s${++this._sendIdCounter}`,
+            destination,
+            destName: destName ?? destination.name ?? "?",
+            params: { gain: new NLLCParam(sendGain.gain, { min: 0 }) },
+            _node: sendGain,
+        };
+        this.sends.push(send);
+        return send;
+    };
+
+    removeSend(id) {
+        const index = this.sends.findIndex((s) => s.id === id);
+        if (index === -1) return false;
+
+        const [removed] = this.sends.splice(index, 1);
+        removed._node.disconnect();
+        return true;
+    };
+
+    // Replaces every existing send with a single one to `destination` at
+    // gain 1 — the common case (a track feeding exactly one place) expressed
+    // as sugar over the general multi-send model above (see also the
+    // console's `out=` param in commands.js).
+    connect(destination, destName) {
+        for (const send of [...this.sends]) this.removeSend(send.id);
+        return this.addSend(destination, { destName });
     };
 
     // Inserts a processor into the chain at `index` (default: appended at the

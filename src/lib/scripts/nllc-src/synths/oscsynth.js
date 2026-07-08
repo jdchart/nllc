@@ -1,5 +1,5 @@
-import { NLLCSynth } from "./synth";
-import { resolveDegree } from "./harmony";
+import { NLLCSynth } from "../synth";
+import { resolveDegree } from "../harmony";
 
 // Converts a MIDI note number to frequency in Hz (A4 = MIDI 69 = 440Hz).
 function midiToFreq(midi) {

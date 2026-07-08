@@ -1,9 +1,6 @@
 # Todo
 
 ## Functionality
-- bus tracks (empty track which can accept and feed sound anywhere)
-- non base synths, processors, modulators in their own folders
-
 - /save_state
 - /restore_state (can be scheduled, and when thigns can be ramped ramped ?)
 
@@ -21,6 +18,7 @@
 - code suggestions and history (like an intelligent console)
 - clicking on an item in ui pastes that thing into at the current cursor
 
+- feedback of the current synth on a track
 - add a button to track to destroy track (like the others)
 - proper scrolling for mixing panes
 - allow for modifying of sizes and hiding of mixer different panes

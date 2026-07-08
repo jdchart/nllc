@@ -36,8 +36,10 @@
 |---|---|
 | `/start` | Resumes the `AudioContext` and starts the clock. |
 | `/stop` | Suspends the `AudioContext` and stops the clock. |
-| `/add_track [name=] [synth=] [...synth options]` | Creates a track. `name` defaults to `"track"` (de-duplicated as `track_2`, `track_3`, ... if taken — pass `name=` explicitly for a nicer name). `synth` selects the synth type (default `oscsynth`; see [objects.md](objects.md)). Any other params are passed straight to the synth's constructor (e.g. `synth=oscsynth waveform=square`). A fresh track's synth starts with **no events** — see `add_event` below. |
+| `/add_track [name=] [synth=] [out=] [...synth options]` | Creates a track. `name` defaults to `"track"` (de-duplicated as `track_2`, `track_3`, ... if taken — pass `name=` explicitly for a nicer name). `synth` selects the synth type (default `oscsynth`; see [objects.md](objects.md)). `out` sets where its one default send feeds (default `master`; see [Buses and sends](#buses-and-sends)). Any other params are passed straight to the synth's constructor (e.g. `synth=oscsynth waveform=square`). A fresh track's synth starts with **no events** — see `add_event` below. |
 | `/tracks` | Lists every track's summary line (same format as running a track command with no params). |
+| `/add_bus [name=] [out=]` | Creates a bus — an empty channel (fader/pan/inserts/sends, no synth) that exists purely to be a shared send destination for other tracks/buses (see [Buses and sends](#buses-and-sends)). `name` defaults to `"bus"` (de-duplicated, like tracks). `out` sets where its one default send feeds (default `master`). |
+| `/buses` | Lists every bus's summary line. |
 | `/clock [bpm=] [num_beats=]` | With no params, reports the current `bpm=... num_beats=...`. `bpm=<n>` changes tempo (glitch-free while running — the current playback position is preserved); it also accepts a trailing ramp duration (`/clock bpm=140 8`, ramps tempo smoothly over 8 seconds) and `at=beat`/`at=cycle` to defer the start — see [Ramps](#ramps). `num_beats=<n>` changes the loop length in beats (defaults to 4) and is **not** rampable (a shifting loop length has no sensible meaning — a ramp spec there is rejected with a message). Both are runtime-mutable at any time. |
 | `/add_modulator [type=] [name=] [...modulator options]` | Creates a modulator — a continuous control source you can patch into any parameter (see [Modulators and patches](#modulators-and-patches) below). `type` defaults to `lfo`. Any other params are passed to the modulator's constructor (e.g. `type=lfo freq=2 name=lfo1`). |
 | `/modulators` | Lists every modulator's summary line (same format as running a modulator command with no params/`help`). |
@@ -46,28 +48,33 @@
 | `/unpatch id=<id>` | Removes a patch. |
 | `/patches` | Lists every active patch, e.g. `x1: lfo1 -> reverb.wet (depth 0.20)`. |
 
-## Channel commands (`/master`, or any track by name)
+## Channel commands (`/master`, or any track/bus by name)
 
 Run with no parameters to get a one-line summary:
 
 ```
-track_1 — gain=0.80 pan=0.00 inserts=[p1:reverb] synth=oscsynth("...") (stopped)
+track_1 — gain=0.80 pan=0.00 inserts=[p1:reverb] sends=[s1:master(1.00)] synth=oscsynth("...") (stopped)
 ```
 
-`(stopped)` only appears if the track's synth has been paused via `stop`.
+`(stopped)` only appears if the track's synth has been paused via `stop`. A
+bus has the same shape, minus the trailing `synth=...` (it has none).
 
 | Param | Effect |
 |---|---|
-| `gain=<0..1>` | Sets the channel's fader position (clamped, exponentially tapered onto actual output level for perceptually-even steps — see [objects.md](objects.md#gain-taper)). Rampable and `at=` deferrable — see [Ramps](#ramps). Can also be a patch destination (`track_1.gain`). |
+| `gain=<0..1>` | Sets the channel's fader position (clamped, exponentially tapered onto actual output level for perceptually-even steps — see [objects.md](objects.md#gain-taper)). Rampable and `at=` deferrable — see [Ramps](#ramps). Can also be a patch destination (`track_1.gain`, `bus1.gain`). |
 | `pan=<-1..1>` | Sets stereo pan (clamped). Also rampable/deferrable/patchable, same as `gain=`. |
-| `add_event [beat=] [pitch=\|degree=] [velocity=] [duration=]` | Appends one event to the track's synth. All fields optional (defaults: `beat=0`, `pitch=60` if neither `pitch=` nor `degree=` given, `velocity=1`, `duration=0.25`). `pitch=` is a raw MIDI note (or, for `sampler`, a slot index); `degree=` is a scale-degree resolved against the shared harmony context *at trigger time* instead — see [objects.md](objects.md#events). Not valid on master. |
-| `clear_events` | Empties the track's synth's event list. Not valid on master. |
-| `start` | Resumes the track's own synth (its events/automation resume being scheduled). Not valid on master. |
-| `stop` | Pauses the track's own synth without touching routing or other tracks. Not valid on master. |
-| `synth=<type>` | Swaps the track's synth to a new instance of `<type>` (see [objects.md](objects.md)), discarding the old one's state (including its events — re-`add_event` afterward). Not valid on master (master has no synth). Only the type is passed through this command — extra constructor options currently require creating the track fresh via `/add_track`. |
+| `add_event [beat=] [pitch=\|degree=] [velocity=] [duration=]` | Appends one event to the track's synth. All fields optional (defaults: `beat=0`, `pitch=60` if neither `pitch=` nor `degree=` given, `velocity=1`, `duration=0.25`). `pitch=` is a raw MIDI note (or, for `sampler`, a slot index); `degree=` is a scale-degree resolved against the shared harmony context *at trigger time* instead — see [objects.md](objects.md#events). Not valid on master or a bus (neither has a synth). |
+| `clear_events` | Empties the track's synth's event list. Not valid on master or a bus. |
+| `start` | Resumes the track's own synth (its events/automation resume being scheduled). Not valid on master or a bus. |
+| `stop` | Pauses the track's own synth without touching routing or other tracks. Not valid on master or a bus. |
+| `synth=<type>` | Swaps the track's synth to a new instance of `<type>` (see [objects.md](objects.md)), discarding the old one's state (including its events — re-`add_event` afterward). Not valid on master or a bus (neither has a synth). Only the type is passed through this command — extra constructor options currently require creating the track fresh via `/add_track`. |
 | `add_processor=<type>` | Creates a new processor of `<type>` and appends it to this channel's insert chain. Returns its assigned name and id, e.g. `added reverb (p1)`. |
 | `remove_processor=<id>` | Removes the processor with that id from this channel's chain (and destroys it, along with any patch touching it). |
-| `remove_self` | Removes the track entirely (and all of its inserts, and any patch touching any of them). Not valid on master. |
+| `out=<name>` | Replaces **every** current send with a single one to `<name>` (a track, bus, or `master`), at gain 1 — see [Buses and sends](#buses-and-sends). |
+| `add_send=<name> [send_gain=<0-1>]` | Adds one more send to `<name>` without disturbing existing ones (`send_gain` defaults to `1`). Returns the new send's id, e.g. `added send s2 -> bus1 (gain 0.40)`. |
+| `remove_send=<id>` | Removes one send by id, leaving the others untouched. |
+| `send=<id> [send_gain=<value>]` | With no `send_gain=`, reports that send's current destination/gain. With `send_gain=`, sets it (rampable/`at=` deferrable, like any param). |
+| `remove_self` | Removes the track/bus entirely (and all of its inserts and sends, and any patch or send elsewhere pointing at it). Not valid on master. |
 
 Multiple params can be combined in one command: `/track_1 gain=0.5 pan=-0.2`.
 
@@ -102,6 +109,46 @@ lfo1: A low-frequency oscillator: a continuous bipolar (-1..1) control signal at
 
 See [objects.md](objects.md#modulators) for available modulator types and their params.
 
+## Buses and sends
+
+Every track (and master) always has at least one **send** — where its
+post-fader signal actually goes. By default a fresh track's one send feeds
+`master`, exactly as before. A **bus** is an empty channel (fader, pan,
+inserts — no synth) that exists purely to be a send *destination*: a shared
+reverb send, a drum sub-mix, anything you'd route more than one track into
+before it reaches master.
+
+```
+/add_bus name=fx1
+/track_1 add_send=fx1 send_gain=0.3
+/drums add_send=fx1 send_gain=0.15
+```
+
+Now both `track_1` and `drums` still feed `master` (their original default
+send, untouched) *and* feed `fx1` at their own independent levels — `fx1`
+itself still feeds `master` too (its own default send), so anything on it
+(e.g. a reverb) reaches the output once, mixed in with everything else.
+
+If you want a channel to feed exactly one place instead of adding sends one
+at a time, `out=` replaces all of them in one step:
+
+```
+/track_1 out=fx1     track_1 now feeds fx1 alone — its old send to master is gone
+```
+
+Adjust or remove an existing send by its id (shown when it's created, or via
+a channel's own summary):
+
+```
+/track_1 send=s2 send_gain=0.5 3   ramp that send's own gain to 0.5 over 3 seconds
+/track_1 remove_send=s2
+```
+
+A bus is otherwise a normal channel — it can hold processors
+(`/fx1 add_processor=reverb`), be a patch destination (`bus1.gain`), and be
+removed (`remove_self`), which also cleans up every other channel's send
+that was feeding into it, the same way removing a patch's endpoint does.
+
 ## Modulators and patches
 
 A **modulator** is a standalone, continuously-running control source (e.g.
@@ -126,12 +173,12 @@ different amounts:
 /patch source=lfo1 dest=track_1.gain depth=0.1
 ```
 
-A destination is always `name.param` — `name` is any track, `master`, any
-processor, or any modulator; `param` is one of that object's own params
+A destination is always `name.param` — `name` is any track, any bus, `master`,
+any processor, or any modulator; `param` is one of that object's own params
 (`gain`/`pan` for a channel, whatever `params` keys a processor/modulator
 exposes, e.g. `wet`, `freq`). A source can be a modulator, but also any
-object with an output signal — a track or master's post-fader level, or a
-processor's post-effect signal — letting one track's level modulate another
+object with an output signal — a track, bus, or master's post-fader level, or
+a processor's post-effect signal — letting one track's level modulate another
 parameter (a basic sidechain).
 
 Every patch gets a compact id (`x1`, `x2`, ...) shown when it's created and
@@ -148,9 +195,9 @@ outlives what it was connected to.
 
 ## Ramps
 
-Give `gain=`, `pan=`, any processor param, any modulator param, `/clock
-bpm=`, or a patch's `depth=` a trailing duration to ramp to the value over
-time instead of setting it instantly:
+Give `gain=`, `pan=`, any processor param, any modulator param, a send's
+`send_gain=`, `/clock bpm=`, or a patch's `depth=` a trailing duration to ramp
+to the value over time instead of setting it instantly:
 
 ```
 /track_1 gain=0 3        ramp gain to 0 over 3 seconds
@@ -182,9 +229,9 @@ together: `/track_1 gain=0 8 /reverb wet=0.9 6b`.
 
 ## Name collisions
 
-Tracks, the master channel, processors, and modulators currently share one
-flat command namespace (whichever the router finds first: built-ins, then
-`master`, then tracks, then processors, then modulators). Names are
-de-duplicated separately within each kind (a track, a processor, and a
-modulator could all end up named the same thing) — avoid naming a new
-object the same as an existing one of a different kind.
+Tracks, buses, the master channel, processors, and modulators currently
+share one flat command namespace (whichever the router finds first:
+built-ins, then `master`, then tracks, then buses, then processors, then
+modulators). Names are de-duplicated separately within each kind (a track, a
+bus, a processor, and a modulator could all end up named the same thing) —
+avoid naming a new object the same as an existing one of a different kind.

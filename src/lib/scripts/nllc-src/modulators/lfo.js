@@ -1,5 +1,5 @@
-import { NLLCModulator } from "./modulator";
-import { NLLCParam } from "./param";
+import { NLLCModulator } from "../modulator";
+import { NLLCParam } from "../param";
 
 // A low-frequency oscillator: a continuously-running OscillatorNode whose raw
 // output is a bipolar [-1, 1] control signal at `freq` Hz — the modular

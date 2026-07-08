@@ -42,6 +42,25 @@ silent until you `add_event` onto it (see [Events](#events) below). `degree=`
 doesn't apply here — the sampler always reads `pitch` as a slot index, never
 resolves it against the harmony context.
 
+## Buses (`/add_bus`)
+
+A bus is an empty channel — fader, pan, an insert chain, sends — with no
+synth of its own. It exists purely to be a shared **send** destination other
+tracks (or other buses) route into, e.g. a shared reverb/delay send, or a
+sub-mix of several tracks routed through one set of processors before
+reaching master:
+
+```
+/add_bus name=fx1
+/track_1 add_send=fx1 send_gain=0.3
+/fx1 add_processor=reverb
+```
+
+A fresh bus's own default send feeds `master`, same as a fresh track — set
+`out=` at creation (`/add_bus name=fx1 out=drumbus`) to feed somewhere else
+instead. See [commands.md](commands.md#buses-and-sends) for the full
+`out=`/`add_send=`/`remove_send=`/`send=` reference.
+
 ## Processors (`add_processor=` on any channel)
 
 ### `reverb` — `NLLCReverb`

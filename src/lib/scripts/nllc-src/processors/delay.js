@@ -1,5 +1,5 @@
-import { NLLCProcessor } from "./processor";
-import { NLLCParam } from "./param";
+import { NLLCProcessor } from "../processor";
+import { NLLCParam } from "../param";
 
 // A stereo ping-pong delay: independent left/right delay lines whose feedback
 // crosses to the *opposite* channel (L's tail feeds R's delay line and vice

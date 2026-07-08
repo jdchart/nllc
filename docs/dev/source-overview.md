@@ -1,7 +1,13 @@
 # Source overview
 
-All DSP/engine code lives in `src/lib/scripts/nllc-src/`. Files are listed roughly
-bottom-up (dependencies first).
+All DSP/engine code lives in `src/lib/scripts/nllc-src/`. Base classes
+(`synth.js`, `processor.js`, `modulator.js`, `channel.js`, etc.) live directly
+in this folder; non-base implementations live one level down, grouped by
+kind — `synths/oscsynth.js`, `synths/sampler.js`, `processors/reverb.js`,
+`processors/delay.js`, `modulators/lfo.js` — so adding a new one is "add a
+file to the matching subfolder, plus one registry line in `nllc.js`," with no
+other file needing to change. Files below are listed roughly bottom-up
+(dependencies first).
 
 ## `taper.js`
 
@@ -117,26 +123,42 @@ line of defense for anything that gets through anyway.
 
 ## `channel.js` — `NLLCChannel`
 
-Base class for anything with a fader, pan, and an insert chain: `master` and every
-`NLLCTrack` are one of these. Owns `input`/`panner`/`gainNode` nodes and the
-`processors` array. `volume`/`pan` getters expose the underlying `AudioParam`s
-directly (so they can be automation targets or bound straight into the UI);
-`output` (aliasing `gainNode`, the post-fader signal) lets a channel double as
-a patch source (see `patch.js`) the same way a synth's or processor's own
-`output` can. `params` (`{ gain: NLLCParam, pan: NLLCParam }`, see `param.js`)
-is the console/UI-facing surface `commands.js`'s `applyParams` uses — `gain`
-wraps `gainNode.gain` through the position↔gain taper (`taper.js`), `pan`
-wraps `panner.pan` directly, both clamped (`0..1` / `-1..1`).
+Base class for anything with a fader, pan, an insert chain, and one or more
+sends: `master`, every `NLLCTrack`, and every bus are one of these. Owns
+`input`/`panner`/`gainNode` nodes, the `processors` array, and the `sends`
+array. `volume`/`pan` getters expose the underlying `AudioParam`s directly (so
+they can be automation targets or bound straight into the UI); `output`
+(aliasing `gainNode`, the post-fader signal) lets a channel double as a patch
+source (see `patch.js`) the same way a synth's or processor's own `output`
+can. `params` (`{ gain: NLLCParam, pan: NLLCParam }`, see `param.js`) is the
+console/UI-facing surface `commands.js`'s `applyParams` uses — `gain` wraps
+`gainNode.gain` through the position↔gain taper (`taper.js`), `pan` wraps
+`panner.pan` directly, both clamped (`0..1` / `-1..1`).
 `addProcessor`/`removeProcessor`/`setProcessorActive` all end by calling
 `_rewireChain()`, which is the only place that actually connects/disconnects
-nodes — everything else just mutates the `processors` array and lets rewiring
-follow.
+the `input → panner → gainNode` portion of the chain — everything else just
+mutates the `processors` array and lets rewiring follow. `_rewireChain()`
+never touches `sends` — those hang directly off `gainNode`.
+
+`addSend(destination, { destName, gain })` creates one more independent
+`gainNode → sendGain → destination.input` edge (throws if `destination ===
+this`) and returns `{ id, destination, destName, params: { gain: NLLCParam } }`;
+`removeSend(id)` tears down and forgets one. `connect(destination, destName)`
+is sugar over both: clear every existing send, add a single fresh one at gain
+1 — the historical single-destination behavior, still the default for a
+freshly-created track/bus. `destName` is display-only (what `channelSummary`
+prints), resolved by whoever calls `addSend`/`connect` — `channel.js` itself
+never resolves names.
 
 ## `track.js` — `NLLCTrack extends NLLCChannel`
 
 Adds exactly one thing over `NLLCChannel`: a `.source` (a synth) whose `.output`
 feeds the track's `.input`. `setSource(newSource)` is how `/track_1 synth=sampler`
-swaps synths at runtime without touching the track's gain/pan/inserts.
+swaps synths at runtime without touching the track's gain/pan/inserts. A
+**bus** (created via `NLLC.createBus`/`/add_bus`) is *not* an `NLLCTrack` — it's
+a bare `NLLCChannel` with no `.source` at all, registered in `nllc.buses`
+instead of `nllc.tracks`. It exists purely to be a named `destination` other
+channels' sends can point at (see `channel.js` above and `nllc.js` below).
 
 ## `synth.js` — `NLLCSynth` (base)
 
@@ -146,7 +168,7 @@ this), `events`/`automation` arrays, `params` (empty — see
 params), `active` (transport pause flag, checked by the clock, not a bypass in the
 routing sense), and a no-op `trigger()` for subclasses to override.
 
-## `oscsynth.js` — `NLLCOscSynth extends NLLCSynth`
+## `synths/oscsynth.js` — `NLLCOscSynth extends NLLCSynth`
 
 One `OscillatorNode` + envelope `GainNode` per triggered note (see
 [objects.md](../user/objects.md) for the envelope shape). `trigger()` resolves
@@ -154,7 +176,7 @@ One `OscillatorNode` + envelope `GainNode` per triggered note (see
 falling back to `event.pitch` otherwise. Starts with an empty `events` array —
 see [commands.md](../user/commands.md) for `add_event`/`clear_events`.
 
-## `sampler.js` — `NLLCSampler extends NLLCSynth`
+## `synths/sampler.js` — `NLLCSampler extends NLLCSynth`
 
 Loads `SAMPLE_FILES` (hardcoded list, from `static/samples/`) into `slots` via
 `fetch` + `decodeAudioData`, URL-encoding filenames since they contain spaces.
@@ -174,7 +196,7 @@ their own DSP between them), `active` (routing bypass, read by
 surface the command router uses for `/reverb wet=0.5` and `/reverb help`),
 `automation`.
 
-## `reverb.js` — `NLLCReverb extends NLLCProcessor`
+## `processors/reverb.js` — `NLLCReverb extends NLLCProcessor`
 
 Convolution reverb against a synthetically-generated impulse response
 (`buildImpulseResponse`: exponentially-decaying random noise per channel — no
@@ -184,7 +206,7 @@ external IR file). Parallel wet/dry: `input` connects straight to `output` (dry)
 `params.wet.audioParam` (kept for use as an `NLLCAutomationEvent` target, e.g.
 the demo bootstrap's fade-in).
 
-## `delay.js` — `NLLCDelay extends NLLCProcessor`
+## `processors/delay.js` — `NLLCDelay extends NLLCProcessor`
 
 Stereo ping-pong delay: a `ChannelSplitter`/`ChannelMerger` pair around two
 independent `DelayNode`s, cross-feeding each channel's output into the *other*
@@ -199,7 +221,7 @@ directly, a pre-existing limitation unchanged by the `NLLCParam` consolidation.
 
 ## `modulator.js` — `NLLCModulator` (base)
 
-Base class for every modulation source (see `lfo.js`). Structurally a
+Base class for every modulation source (see `modulators/lfo.js`). Structurally a
 processor's sibling — it's named/addressable and has `params` the exact same
 way — but it never sits in a channel's insert chain; it exists purely to be
 patched (see `patch.js`) into some other object's parameter. `output` is a
@@ -208,7 +230,7 @@ plain `GainNode`; by convention a modulator's raw output is bipolar
 how hard that signal pushes any given destination — the same modulator can
 drive several destinations at different depths.
 
-## `lfo.js` — `NLLCLFO extends NLLCModulator`
+## `modulators/lfo.js` — `NLLCLFO extends NLLCModulator`
 
 A continuously-running `OscillatorNode` (started once in the constructor,
 never stopped) connected straight into `this.output` — a bipolar control
@@ -259,17 +281,22 @@ is the one function that knows how to get/set/ramp/defer any `NLLCParam` (see
 copies of the same ramp/instant/`at=` branching.
 
 `channelCommand` and `paramObjectCommand` are the two shapes of object the
-router knows how to talk to: `channelCommand` handles a track or master
-(gain/pan via `applyParams`, plus channel-specific params like `add_event`/
-`synth=`/`add_processor=`); `paramObjectCommand` is shared by
-`processorCommand` and `modulatorCommand` (both are just "addressed by name,
-expose `.params`" — the only difference is which `nllc.remove*` function gets
-called for `remove_self`). `createCommandRouter(nllc)` ties it together into
-`executeCommand`, which first splits one submitted line into multiple `/name
-...` segments (`splitCommands`, letting `/track_1 gain=0 8 /reverb wet=0.9 6b`
-run both together) before dispatching each — in order, against top-level
-`commands`, `master`, `nllc.tracks`, `nllc.processors`, then `nllc.modulators`.
-See [adding-commands.md](adding-commands.md).
+router knows how to talk to: `channelCommand` handles a track, a bus, or
+master (gain/pan via `applyParams`, plus channel-specific params like
+`add_event`/`synth=`/`add_processor=`, and routing: `out=`/`add_send=`/
+`remove_send=`/`send=`+`send_gain=` against the channel's own `sends` — see
+`channel.js`'s `addSend`/`removeSend`/`connect` above); `paramObjectCommand`
+is shared by `processorCommand` and `modulatorCommand` (both are just
+"addressed by name, expose `.params`" — the only difference is which
+`nllc.remove*` function gets called for `remove_self`). `channelCommand`'s
+`remove_self` branch checks `nllc.buses.includes(channel)` to call
+`removeBus` instead of `removeTrack` for a bus. `createCommandRouter(nllc)`
+ties it together into `executeCommand`, which first splits one submitted line
+into multiple `/name ...` segments (`splitCommands`, letting `/track_1 gain=0
+8 /reverb wet=0.9 6b` run both together) before dispatching each — in order,
+against top-level `commands`, `master`, `nllc.tracks`, `nllc.buses`,
+`nllc.processors`, then `nllc.modulators`. See
+[adding-commands.md](adding-commands.md).
 
 ## `nllc.js` — `NLLC`
 
@@ -280,33 +307,40 @@ The top-level object and factory/registry hub:
   (and `createSynth`/`createProcessor`/`createModulator`) look up against.
   **Adding a new synth, processor, or modulator class means adding one line
   here** (plus the import) — nothing else in the engine needs to know about it.
-- `createTrack`/`createSynth`/`createProcessor`/`createModulator` — construct +
-  register (with the clock, and with `tracks`/`processors`/`modulators` for
-  name-based lookup) in one call. `createSynth` also threads `this.harmony`
-  (one shared context constructed once in the `NLLC` constructor, see
-  [harmony.js](#harmonyjs)) into every synth it builds.
+- `createTrack`/`createBus`/`createSynth`/`createProcessor`/`createModulator` —
+  construct + register (with the clock, and with `tracks`/`buses`/
+  `processors`/`modulators` for name-based lookup) in one call. `createSynth`
+  also threads `this.harmony` (one shared context constructed once in the
+  `NLLC` constructor, see [harmony.js](#harmonyjs)) into every synth it
+  builds. Both `createTrack` and `createBus` resolve an `out=` option (default
+  `"master"`) via `_resolveObject` and call `channel.connect(destObject,
+  destName)` to set up the one default send a fresh track/bus starts with.
 - `setTrackSynth` — swap a track's synth at runtime (used by `/track_1
   synth=sampler`), correctly deregistering the old synth from the clock and
   registering the new one.
-- `removeTrack`/`removeProcessor`/`removeModulator` — the inverse of the
-  `create*` methods above; each first calls `_removePatchesReferencing(object)`
+- `removeTrack`/`removeBus`/`removeProcessor`/`removeModulator` — the inverse
+  of the `create*` methods above; each first calls
+  `_removePatchesReferencing(object)` *and* `_removeSendsReferencing(object)`
   (see below) *before* disconnecting any of its own nodes, then handles its
-  own teardown (`removeTrack` also tears down the track's own processor
-  inserts).
+  own teardown (`removeTrack`/`removeBus` also tear down the channel's own
+  processor inserts and its own sends).
 - `createPatch({ sourceName, destName, depth })` / `removePatch(patch)` — the
   modular-patching layer. `_resolveObject(name)` resolves a bare name against
-  every addressable object (master, then tracks, processors, modulators — the
-  same order `executeOne`'s dispatch uses); `_resolveDest("name.param")`
-  splits on the dot and looks up `object.params[paramKey].audioParam` — one
-  lookup for every kind of object, since channels/processors/modulators all
-  expose `params` as `{ key: NLLCParam }` uniformly (see `param.js`).
-  `_removePatchesReferencing(object)` cascade-removes any patch whose
-  `sourceObject` or `destObject` is the object being torn down, so a patch
-  never outlives either endpoint.
+  every addressable object (master, then tracks, buses, processors,
+  modulators — the same order `executeOne`'s dispatch uses); `_resolveDest
+  ("name.param")` splits on the dot and looks up
+  `object.params[paramKey].audioParam` — one lookup for every kind of object,
+  since channels/processors/modulators all expose `params` as `{ key:
+  NLLCParam }` uniformly (see `param.js`). `_removePatchesReferencing(object)`
+  cascade-removes any patch whose `sourceObject` or `destObject` is the object
+  being torn down, so a patch never outlives either endpoint.
+  `_removeSendsReferencing(object)` is the same idea for sends: it walks every
+  track, bus, and master and removes any send whose `destination` is the
+  object being torn down, so a send never outlives the channel it fed into.
 - `_uniqueName(base, existingNames)` — de-duplicates names as `base`, `base_2`,
-  `base_3`, ... (used independently for tracks, processors, and modulators —
-  each its own namespace, so it's possible, if unlikely, for two different
-  kinds of object to end up with the same addressable name).
+  `base_3`, ... (used independently for tracks, buses, processors, and
+  modulators — each its own namespace, so it's possible, if unlikely, for two
+  different kinds of object to end up with the same addressable name).
 
 ## `ollama.js` — `Ollama`
 

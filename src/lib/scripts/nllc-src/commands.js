@@ -159,41 +159,54 @@ function applyParams(nllc, paramsMap, input, { startTime, label }, { reportUnkno
     return results;
 };
 
-// Builds the one-line status string for a channel (master or a track), shown
-// both for `/track_1` with no params and inside `/tracks`.
+// Builds the one-line status string for a channel (master, a track, or a
+// bus), shown both for `/track_1` with no params and inside `/tracks`/`/buses`.
 function channelSummary(channel) {
     const gain = `gain=${channel.params.gain.get().toFixed(2)}`;
     const pan = `pan=${channel.params.pan.get().toFixed(2)}`;
     const inserts = channel.processors.length
         ? channel.processors.map((p) => `${p.id}:${p.name}${p.active ? "" : "(off)"}`).join(", ")
         : "none";
+    const sends = channel.sends.length
+        ? channel.sends.map((s) => `${s.id}:${s.destName}(${s.params.gain.get().toFixed(2)})`).join(", ")
+        : "none";
     // For now the source can't be introspected further, but surface what it
     // is so this is a natural place for that control to grow into.
     const synth = channel.source
         ? ` synth=${channel.source.name}("${channel.source.llm_summary}")${channel.source.active ? "" : " (stopped)"}`
         : "";
-    return `${channel.name} — ${gain} ${pan} inserts=[${inserts}]${synth}`;
+    return `${channel.name} — ${gain} ${pan} inserts=[${inserts}] sends=[${sends}]${synth}`;
 };
 
-// Every track (and master) is addressable by its own name, e.g. /track_1 gain=0.5.
-// gain is a 0-1 position, exponentially tapered onto the actual AudioParam; pan is
-// linear -1..1. Either can instead be ramped by giving a trailing duration, e.g.
-// /track_1 gain=0 3 (over 3 seconds) or gain=0 4b (over 4 beats). A set (ramped
-// or not) starts right now by default; add at=beat or at=cycle to defer it to the
-// next beat/loop boundary instead, e.g. /track_1 gain=0 3 at=cycle, or
-// /track_1 gain=0 at=cycle for an instant (unramped) change that still waits for
-// the boundary. add_processor/
-// remove_processor manage the insert chain at runtime. add_event appends an
-// NLLCEvent to the track's synth (beat=/pitch=|degree=/velocity=/duration=, each
-// optional); clear_events empties its pattern. start/stop pause a track's own
-// synth (its events stop scheduling) without touching routing; master has no synth,
-// so start/stop/synth/add_event/clear_events are no-ops there.
+// Every track, bus, and master is addressable by its own name, e.g.
+// /track_1 gain=0.5. gain is a 0-1 position, exponentially tapered onto the
+// actual AudioParam; pan is linear -1..1. Either can instead be ramped by
+// giving a trailing duration, e.g. /track_1 gain=0 3 (over 3 seconds) or
+// gain=0 4b (over 4 beats). A set (ramped or not) starts right now by
+// default; add at=beat or at=cycle to defer it to the next beat/loop
+// boundary instead, e.g. /track_1 gain=0 3 at=cycle, or /track_1 gain=0
+// at=cycle for an instant (unramped) change that still waits for the
+// boundary. add_processor/remove_processor manage the insert chain at
+// runtime. out=<name> replaces every current send with a single one to that
+// track/bus/master (the default: a fresh track/bus sends to master alone).
+// add_send=<name> (optionally with send_gain=<0-1>, default 1) adds one more
+// simultaneous send without disturbing existing ones — e.g. a track can send
+// dry to master (its default) and also add_send= a reverb bus at a lower
+// level; remove_send=<id> removes just one. send=<id> (optionally with
+// send_gain=<value>, ramp/at= supported the same as any other param) reports
+// or adjusts one existing send's own gain afterward. add_event appends an
+// NLLCEvent to the track's synth (beat=/pitch=|degree=/velocity=/duration=,
+// each optional); clear_events empties its pattern. start/stop pause a
+// track's own synth (its events stop scheduling) without touching routing;
+// master and any bus have no synth, so start/stop/synth/add_event/
+// clear_events are no-ops there.
 function channelCommand(nllc, channel, params) {
     if (Object.keys(params).length === 0) return channelSummary(channel);
 
     if (params.remove_self) {
         if (channel === nllc.master) return "cannot remove the master channel";
-        nllc.removeTrack(channel);
+        if (nllc.buses.includes(channel)) nllc.removeBus(channel);
+        else nllc.removeTrack(channel);
         return `${channel.name} removed`;
     }
 
@@ -206,9 +219,48 @@ function channelCommand(nllc, channel, params) {
     // synth=, ...) that aren't rampable params at all.
     results.push(...applyParams(nllc, channel.params, params, { startTime, label }, { reportUnknown: false }));
 
+    if ("out" in params) {
+        const destObject = nllc._resolveObject(params.out);
+        if (!destObject || !destObject.input) {
+            results.push(`unknown or invalid destination "${params.out}"`);
+        } else {
+            channel.connect(destObject, params.out);
+            results.push(`routed to ${params.out} (replacing previous sends)`);
+        }
+    }
+
+    if ("add_send" in params) {
+        const destObject = nllc._resolveObject(params.add_send);
+        if (!destObject || !destObject.input) {
+            results.push(`unknown or invalid send destination "${params.add_send}"`);
+        } else {
+            const gain = params.send_gain !== undefined ? toNumber(params.send_gain, "send_gain") : 1;
+            const send = channel.addSend(destObject, { destName: params.add_send, gain });
+            results.push(`added send ${send.id} -> ${params.add_send} (gain ${gain.toFixed(2)})`);
+        }
+    }
+
+    if ("remove_send" in params) {
+        const removed = channel.removeSend(params.remove_send);
+        results.push(removed
+            ? `removed send ${params.remove_send}`
+            : `no send "${params.remove_send}" on ${channel.name}`);
+    }
+
+    if ("send" in params) {
+        const send = channel.sends.find((s) => s.id === params.send);
+        if (!send) {
+            results.push(`no send "${params.send}" on ${channel.name}`);
+        } else if (!("send_gain" in params)) {
+            results.push(`${send.id} -> ${send.destName} (gain ${send.params.gain.get().toFixed(2)})`);
+        } else {
+            results.push(...applyParams(nllc, { gain: send.params.gain }, { gain: params.send_gain }, { startTime, label }));
+        }
+    }
+
     if (params.add_event) {
         if (!channel.source) {
-            results.push("master has no synth");
+            results.push(`${channel.name} has no synth`);
         } else {
             const event = new NLLCEvent({
                 beat: toNumber(params.beat ?? 0, "beat"),
@@ -224,7 +276,7 @@ function channelCommand(nllc, channel, params) {
 
     if (params.clear_events) {
         if (!channel.source) {
-            results.push("master has no synth");
+            results.push(`${channel.name} has no synth`);
         } else {
             channel.source.events = [];
             results.push(`${channel.source.name} events cleared`);
@@ -233,7 +285,7 @@ function channelCommand(nllc, channel, params) {
 
     if (params.start) {
         if (!channel.source) {
-            results.push("master cannot be started/stopped");
+            results.push(`${channel.name} has no synth`);
         } else {
             channel.source.active = true;
             results.push(`${channel.name} started`);
@@ -242,7 +294,7 @@ function channelCommand(nllc, channel, params) {
 
     if (params.stop) {
         if (!channel.source) {
-            results.push("master cannot be started/stopped");
+            results.push(`${channel.name} has no synth`);
         } else {
             channel.source.active = false;
             results.push(`${channel.name} stopped`);
@@ -251,7 +303,7 @@ function channelCommand(nllc, channel, params) {
 
     if ("synth" in params) {
         if (!channel.source) {
-            results.push("master has no synth");
+            results.push(`${channel.name} has no synth`);
         } else {
             try {
                 nllc.setTrackSynth(channel, params.synth);
@@ -352,6 +404,19 @@ export function createCommandRouter(nllc) {
         tracks: () => {
             if (nllc.tracks.length === 0) return "no tracks";
             return nllc.tracks.map((track) => channelSummary(track)).join("\n");
+        },
+        // A bus is a track-shaped object with no synth of its own — an empty
+        // channel (fader/pan/inserts/sends) that exists purely to be a shared
+        // destination other tracks/buses can send into, e.g. a shared reverb
+        // send or a drum sub-mix. Defaults to feeding master, same as a fresh
+        // track, unless out=<name> names a different destination.
+        add_bus: (params) => {
+            const bus = nllc.createBus(params);
+            return `created ${bus.name}`;
+        },
+        buses: () => {
+            if (nllc.buses.length === 0) return "no buses";
+            return nllc.buses.map((bus) => channelSummary(bus)).join("\n");
         },
         // bpm can be ramped the same way a track's gain/processor's wet can
         // (/clock bpm=140 8, optionally at=beat|cycle) — see NLLCClock.rampBpm
@@ -456,8 +521,8 @@ export function createCommandRouter(nllc) {
     };
 
     // Dispatch order: built-in top-level commands, then master, then a
-    // matching track name, then a matching processor name, then a matching
-    // modulator name.
+    // matching track name, then a matching bus name, then a matching
+    // processor name, then a matching modulator name.
     function executeOne(text) {
         if (!text.trim().startsWith("/")) {
             return `unrecognized: "${text}" (commands must start with /)`;
@@ -476,6 +541,9 @@ export function createCommandRouter(nllc) {
 
         const track = nllc.tracks.find((t) => t.name === name);
         if (track) return run(name, (p) => channelCommand(nllc, track, p), params);
+
+        const bus = nllc.buses.find((b) => b.name === name);
+        if (bus) return run(name, (p) => channelCommand(nllc, bus, p), params);
 
         const processor = nllc.processors.find((p) => p.name === name);
         if (processor) return run(name, (p) => processorCommand(nllc, processor, p), params);

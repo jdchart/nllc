@@ -173,6 +173,40 @@ strikethrough when off), or remove it entirely:
 /drums remove_processor=p2
 ```
 
+## Buses and sends
+
+Every track (and master) has at least one **send** — where its signal
+actually goes, `master` by default. A **bus** is an empty channel (no synth)
+that exists purely to be a shared send destination — useful once you want
+more than one track running through the same reverb/delay, without repeating
+that processor per track:
+
+```
+/add_bus name=fx1
+/fx1 add_processor=reverb
+/track_1 add_send=fx1 send_gain=0.3
+/drums add_send=fx1 send_gain=0.15
+```
+
+`track_1` and `drums` still play dry through their original send to master
+*and* now also feed `fx1` at their own levels — `fx1`'s own reverb reaches
+the output through its own (default) send to master. Adjust or remove a send
+by the id shown when it was created:
+
+```
+/track_1 send=s2 send_gain=0.5 3
+/track_1 remove_send=s2
+```
+
+Or replace every send at once with `out=`, if you just want a track to feed
+somewhere else entirely instead of adding another destination:
+
+```
+/track_1 out=fx1
+```
+
+See [commands.md](commands.md#buses-and-sends) for the full reference.
+
 ## Modulators and patching
 
 So far every parameter change has been you typing a value or a ramp. A
@@ -213,10 +247,11 @@ freq=8 3` glides its rate from 2Hz to 8Hz over 3 seconds. See
 
 The mixer is organized into sections, each with a title and a "none" placeholder
 when it's empty: **Tracks** (one strip per track, labeled with its own name —
-not a prettified guess — plus a separate strip for **master**), **Modulators**
-(one tile per modulator, e.g. `lfo1`, with a live meter showing its current
-bipolar output value and its params), and **Patches** (every active patch
-cable as a row, with its live depth and a remove button).
+not a prettified guess — plus a separate strip for **master**), **Buses**
+(one strip per bus, identical in shape to a track strip minus the synth),
+**Modulators** (one tile per modulator, e.g. `lfo1`, with a live meter showing
+its current bipolar output value and its params), and **Patches** (every
+active patch cable as a row, with its live depth and a remove button).
 
 Each track strip mirrors and controls the same state the console does: a
 vertical fader (gain, with a level meter next to it), a rotary pan dial
@@ -226,7 +261,8 @@ audio graph directly — the console and mixer are just two views onto the same
 `NLLC` instance, so a `/track_1 gain=0.4` and dragging that track's fader do
 the same thing. A modulator tile and a patch row are read-only in the mixer
 today (control them from the console); their live values still update in
-real time as you type commands.
+real time as you type commands. Sends (`out=`/`add_send=`/etc.) are
+console-only for now too — there's no mixer UI for routing yet.
 
 Toggle the mixer pane with the collapse arrow between the console and mixer (it
 shrinks to a thin rail showing just the master power button, clock LED, and level
@@ -236,15 +272,16 @@ meter) — useful for maximizing the console when you're just typing.
 
 ```
 /track_1 remove_self
+/fx1 remove_self
 /lfo1 remove_self
 /stop
 ```
 
-`remove_self` works on tracks, processors, and modulators (not master) —
-removing a modulator or a track/processor also removes any patch that was
-touching it, so there's nothing left to separately clean up with `/unpatch`
-unless you're removing a specific patch on its own. `/stop` suspends the
-whole audio engine; `/start` resumes it.
+`remove_self` works on tracks, buses, processors, and modulators (not
+master) — removing any of them also removes any patch or send elsewhere that
+was touching it, so there's nothing left to separately clean up with
+`/unpatch`/`remove_send=` unless you're removing a specific one on its own.
+`/stop` suspends the whole audio engine; `/start` resumes it.
 
 See [commands.md](commands.md) for the full command reference and
 [objects.md](objects.md) for every synth/processor/modulator type and its

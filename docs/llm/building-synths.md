@@ -14,8 +14,10 @@ not `currentTime`), connect the chain's end into `this.output`, and `start()`/
 inside `trigger()`, don't try to reuse a persistent node across triggers.
 
 ```js
-import { NLLCSynth } from "./synth";
-import { resolveDegree } from "./harmony"; // only if pitch means "MIDI note"
+// src/lib/scripts/nllc-src/synths/mysynth.js — non-base synths live in their
+// own synths/ subfolder, one level down from the base classes.
+import { NLLCSynth } from "../synth";
+import { resolveDegree } from "../harmony"; // only if pitch means "MIDI note"
 
 export class NLLCMySynth extends NLLCSynth {
     constructor(audioContext, { name = "mysynth" } = {}) {
@@ -35,8 +37,9 @@ export class NLLCMySynth extends NLLCSynth {
 };
 ```
 
-Register it in `nllc.js`'s `SYNTH_TYPES` map (`{ mysynth: NLLCMySynth }`) — the
-only other required change. That alone makes `/add_track synth=mysynth` and
+Register it in `nllc.js`'s `SYNTH_TYPES` map (`import { NLLCMySynth } from
+"./synths/mysynth"; ... { mysynth: NLLCMySynth }`) — the only other required
+change. That alone makes `/add_track synth=mysynth` and
 `/track_1 synth=mysynth` work.
 
 Leave `this.events` empty in the constructor — a fresh instance being silent

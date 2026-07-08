@@ -15,7 +15,7 @@ routes/code-editor/+page.svelte    owns the NLLC instance + executeCommand; top-
 ├── CodeEditor.svelte              text input + scrollback log; calls onCommand(text) prop
 └── Mixer.svelte  /  CollapsedRail.svelte    (toggled by a collapse arrow)
     ├── Transport.svelte           engine on/off, clock LED, beat/bpm readout
-    ├── MixerChannel.svelte        one per track, plus one for master (Tracks section)
+    ├── MixerChannel.svelte        one per track, one per bus, plus one for master
     ├── ModulatorStrip.svelte      one per modulator (Modulators section)
     └── PatchList.svelte           every active patch cable, as a flat list
 ```
@@ -23,12 +23,15 @@ routes/code-editor/+page.svelte    owns the NLLC instance + executeCommand; top-
 `code-editor/+page.svelte` is the only place the `NLLC` instance and its
 `createCommandRouter`-produced `executeCommand` function live; they're passed down
 as props. It also owns a `requestAnimationFrame` poll loop that diffs each of
-`nllc.tracks`, `nllc.modulators`, and `nllc.patches` (by `.name`/`.name`/`.id`
-respectively, joined into a string) to detect additions/removals — these are
-plain mutable arrays, not Svelte state, since they're mutated from inside the
-DSP layer (`NLLC.createTrack`/`removeTrack`/`createModulator`/etc.), not from
-component code. `MixerChannel.svelte` does the same trick for a channel's
-`processors` list.
+`nllc.tracks`, `nllc.buses`, `nllc.modulators`, and `nllc.patches` (by
+`.name`/`.name`/`.name`/`.id` respectively, joined into a string) to detect
+additions/removals — these are plain mutable arrays, not Svelte state, since
+they're mutated from inside the DSP layer (`NLLC.createTrack`/`removeTrack`/
+`createBus`/`removeBus`/`createModulator`/etc.), not from component code.
+`MixerChannel.svelte` does the same trick for a channel's `processors` list,
+and needs no changes at all to also render a bus strip — it only ever reads
+`channel.gainNode`/`channel.pan`/`channel.processors`, all present on any
+`NLLCChannel` regardless of whether it has a `.source`.
 
 Everything below `code-editor/+page.svelte` reads live values off the `NLLC`
 object's real Web Audio nodes directly (`channel.gainNode.gain.value`,
@@ -52,6 +55,7 @@ NLLC
 ├── clock: NLLCClock        drives every registered "unit"
 ├── master: NLLCChannel     final bus → audioContext.destination
 ├── tracks: NLLCTrack[]     extends NLLCChannel, each wraps one .source (a synth)
+├── buses: NLLCChannel[]    plain channels, no .source — addressable send destinations
 ├── processors: NLLCProcessor[]   flat list of every processor that exists anywhere,
 │                                  for name/id lookup + removal; ownership/insertion
 │                                  order lives on the owning Channel, not here
@@ -61,18 +65,50 @@ NLLC
 └── patches: NLLCPatch[]    every active "patch cable" (source.output → depth → destParam)
 ```
 
-### Signal chain (per `NLLCChannel` — master or a track)
+### Signal chain (per `NLLCChannel` — master, a track, or a bus)
 
 ```
-input ──▶ [processors[0].input → .output] ──▶ [processors[1] ...] ──▶ panner ──▶ gainNode ──▶ (destination)
+input ──▶ [processors[0].input → .output] ──▶ [processors[1] ...] ──▶ panner ──▶ gainNode ──┬──▶ sends[0]: sendGain ──▶ destination0.input
+                                                                                              ├──▶ sends[1]: sendGain ──▶ destination1.input
+                                                                                              └──▶ ...
 ```
 
-`_rewireChain()` rebuilds this every time a processor is added/removed/bypassed,
-skipping any processor with `active === false` (a true routing bypass — the node is
-disconnected, not just silenced). A track's `input` is fed by its synth's `output`
+`_rewireChain()` rebuilds the `input → panner → gainNode` portion every time a
+processor is added/removed/bypassed, skipping any processor with `active ===
+false` (a true routing bypass — the node is disconnected, not just silenced).
+It never touches `sends` — those hang directly off `gainNode`, independent of
+the insert chain. A track's `input` is fed by its synth's `output`
 (`NLLCTrack` wires `source.output → this.input` in its constructor and in
-`setSource()`); a track's `gainNode` connects to `master.input`; master's
-`gainNode` connects to `audioContext.destination`.
+`setSource()`); a fresh track's/bus's one default send targets `master`
+(`connect()`, called at creation) unless `out=` names something else.
+
+### Sends: one channel, several simultaneous destinations
+
+Before buses existed, `NLLCChannel.connect(destination)` was a single
+replaceable edge — `gainNode` disconnected and reconnected to wherever it
+should feed next. That's still the *common* case (a fresh track/bus feeds
+master alone), but it's now sugar over a more general model: `this.sends` is
+an array of `{ id, destination, destName, params: { gain: NLLCParam } }`,
+each its own independent `gainNode → sendGain → destination.input` edge with
+its own rampable gain. `addSend(destination, { destName, gain })` adds one
+without disturbing the others (e.g. a track can send dry to master *and*
+add_send= a reverb bus at a lower level); `removeSend(id)` tears down just
+that one; `connect(destination, destName)` clears every existing send and
+adds a single fresh one at gain 1 — what a plain `out=<name>` console command
+does. A **bus** (`NLLC.createBus`, `/add_bus`) is nothing more than a bare
+`NLLCChannel` (no `.source`) registered in `nllc.buses` under its own name —
+it exists purely to be a `destination` other channels' sends can point at
+(a shared reverb send, a drum sub-mix, etc.), and since it's a full
+`NLLCChannel` it can itself have processors, its own sends elsewhere, and be
+a patch destination (`bus1.gain`) exactly like a track or master.
+
+`NLLC._removeSendsReferencing(object)` mirrors `_removePatchesReferencing`:
+when a track/bus is torn down, every *other* channel's send pointing at it
+is disconnected and removed first (same "must run before the object's own
+blanket `.disconnect()`" ordering constraint patches already have). The one
+routing guard in place today is `addSend` refusing a channel sending to
+itself; a longer cycle (bus A → bus B → bus A) isn't detected — see
+`docs/llm/overview.md`'s limitations list.
 
 ### One param abstraction for everything rampable/patchable
 
@@ -238,11 +274,13 @@ needing a ramp duration at all.
 
 `createCommandRouter(nllc)` closes over the live `NLLC` instance and returns a
 single `executeCommand(text)` function — it does not maintain any state of its
-own. Dispatch is by name lookup against `nllc.tracks`/`nllc.processors`/
-`nllc.modulators`/`master` at call time, so newly created tracks/processors/
-modulators are addressable immediately with no registration step beyond what
-`NLLC.createTrack`/`createProcessor`/`createModulator` already do. See
-[adding-commands.md](adding-commands.md) for extending it.
+own. Dispatch is by name lookup against `nllc.tracks`/`nllc.buses`/
+`nllc.processors`/`nllc.modulators`/`master` at call time, so newly created
+tracks/buses/processors/modulators are addressable immediately with no
+registration step beyond what `NLLC.createTrack`/`createBus`/`createProcessor`/
+`createModulator` already do. A bus dispatches through the exact same
+`channelCommand` a track does — see [adding-commands.md](adding-commands.md)
+for extending it.
 
 ## Why this shape
 
@@ -251,6 +289,14 @@ intentionally thin — closer to interfaces than frameworks — so a new synth,
 processor, or modulator subclass only needs to wire its own Web Audio nodes
 between `this.input`/`this.output` (or just define `this.output` for a synth
 or modulator) and implement the one or two methods the clock/router actually
-call. See [source-overview.md](source-overview.md) for a file-by-file tour and
-[creating-a-synth.md](creating-a-synth.md) / [creating-a-processor.md](creating-a-processor.md)
-/ [creating-a-modulator.md](creating-a-modulator.md) for tutorials.
+call. Non-base implementations live one folder down from `nllc-src/`, grouped
+by kind (`synths/`, `processors/`, `modulators/`), while the base classes stay
+directly in `nllc-src/` — see [source-overview.md](source-overview.md) for a
+file-by-file tour and [creating-a-synth.md](creating-a-synth.md) /
+[creating-a-processor.md](creating-a-processor.md) /
+[creating-a-modulator.md](creating-a-modulator.md) for tutorials. A bus is the
+one exception to "new concept means a new class": it's deliberately just a
+bare `NLLCChannel`, not a subclass, since everything a bus needs to be
+(fader/pan/inserts/sends, addressable by name) is already exactly what
+`NLLCChannel` provides — `NLLCTrack`'s only addition over it is the `.source`
+a bus doesn't have.

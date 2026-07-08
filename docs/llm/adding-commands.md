@@ -46,7 +46,11 @@ const commands = {
 ```
 
 Dispatch order in `executeCommand`: top-level `commands` → `master` → track by
-name → processor by name → modulator by name → `unknown command`.
+name → bus by name → processor by name → modulator by name → `unknown
+command`. A bus (`/add_bus`) is addressed and handled exactly like a track —
+both go through `channelCommand` — the only difference is a bus has no
+`.source`, so synth-only params (`add_event`, `synth=`, `start`/`stop`) are
+no-ops on it, same as on master.
 `executeCommand` also splits one submitted line into multiple `/name ...`
 segments before dispatch (`splitCommands`), so several commands typed on one
 line run together — no extra code needed for a new command to participate.

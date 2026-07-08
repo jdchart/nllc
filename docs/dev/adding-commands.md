@@ -85,11 +85,14 @@ one bad command that caused it (see `toNumber`'s doc comment in
 
 `executeCommand(text)` (the function `createCommandRouter` returns) resolves a
 command name in this order: `commands` (top-level) → `master` → `nllc.tracks`
-(by `.name`) → `nllc.processors` (by `.name`) → `nllc.modulators` (by `.name`)
-→ `unknown command`. If you're adding an entirely new *kind* of addressable
-object (not a track, processor, or modulator), you'd extend this dispatch
-chain in `executeCommand` itself, following the same `track ? run(...) : ...`
-shape already there.
+(by `.name`) → `nllc.buses` (by `.name`) → `nllc.processors` (by `.name`) →
+`nllc.modulators` (by `.name`) → `unknown command`. A bus is dispatched
+through the exact same `channelCommand` a track is — it's not a new *kind* of
+addressable object from the router's point of view, just another
+`NLLCChannel` (with no `.source`). If you're adding a genuinely new kind of
+addressable object (not a track/bus, processor, or modulator), you'd extend
+this dispatch chain in `executeCommand` itself, following the same `track ?
+run(...) : ...` shape already there.
 
 A patch (`/patch`, `/unpatch`) is a different shape entirely — it isn't
 addressed by its own name in the dispatch chain above (a patch's compact id,

@@ -9,8 +9,9 @@ creates for you).
 A one-oscillator sine "ping" synth, ignoring `pitch`/`velocity` for simplicity:
 
 ```js
-// src/lib/scripts/nllc-src/pingsynth.js
-import { NLLCSynth } from "./synth";
+// src/lib/scripts/nllc-src/synths/pingsynth.js — non-base synths live in
+// their own synths/ subfolder, one level down from the base classes.
+import { NLLCSynth } from "../synth";
 
 export class NLLCPingSynth extends NLLCSynth {
     constructor(audioContext, { name = "pingsynth" } = {}) {
@@ -36,7 +37,7 @@ export class NLLCPingSynth extends NLLCSynth {
 };
 ```
 
-Points worth noting, all copied from `oscsynth.js`/`sampler.js`:
+Points worth noting, all copied from `synths/oscsynth.js`/`synths/sampler.js`:
 
 - **Always create fresh nodes per trigger.** `OscillatorNode`/`AudioBufferSourceNode`
   are one-shot (`start()` can only be called once) — you cannot reuse a single
@@ -60,7 +61,7 @@ Add it to the registry in `nllc.js` (the only place that needs to know new synth
 types exist):
 
 ```js
-import { NLLCPingSynth } from "./pingsynth";
+import { NLLCPingSynth } from "./synths/pingsynth";
 
 const SYNTH_TYPES = {
     oscsynth: NLLCOscSynth,
@@ -91,7 +92,7 @@ time instead of always reading `event.pitch` directly, so the synth
 automatically benefits from any future key/scale-changing command:
 
 ```js
-import { resolveDegree } from "./harmony";
+import { resolveDegree } from "../harmony";
 
 trigger(time, event, secondsPerBeat) {
     const midi = event.degree !== undefined ? resolveDegree(this.harmony, event.degree) : event.pitch;

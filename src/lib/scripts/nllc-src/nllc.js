@@ -1,11 +1,11 @@
 import { NLLCClock } from "./clock";
 import { NLLCChannel } from "./channel";
 import { NLLCTrack } from "./track";
-import { NLLCReverb } from "./reverb";
-import { NLLCDelay } from "./delay";
-import { NLLCOscSynth } from "./oscsynth";
-import { NLLCSampler } from "./sampler";
-import { NLLCLFO } from "./lfo";
+import { NLLCReverb } from "./processors/reverb";
+import { NLLCDelay } from "./processors/delay";
+import { NLLCOscSynth } from "./synths/oscsynth";
+import { NLLCSampler } from "./synths/sampler";
+import { NLLCLFO } from "./modulators/lfo";
 import { NLLCPatch } from "./patch";
 import { createHarmonyContext } from "./harmony";
 
@@ -44,9 +44,10 @@ export class NLLC {
         this.running = false;
 
         this.master = new NLLCChannel(this.audioContext, { name: "master" });
-        this.master.connect(this.audioContext.destination);
+        this.master.connect(this.audioContext.destination, "speakers");
 
         this.tracks = [];
+        this.buses = [];
         this.processors = [];
         this._processorIdCounter = 0;
 
@@ -102,25 +103,50 @@ export class NLLC {
     };
 
     // Creates a fully-wired track: a unique name, a synth (default
-    // "oscsynth"), connected to master, and registered with the clock as two
-    // separate units (the synth for its own events, the track itself for its
-    // own automation — see clock.js).
+    // "oscsynth"), connected to master (or `out=` a different track/bus),
+    // and registered with the clock as two separate units (the synth for its
+    // own events, the track itself for its own automation — see clock.js).
     createTrack(options = {}) {
         const name = this._uniqueName(options.name ?? "track", this.tracks.map((t) => t.name));
 
         // The synth keeps its own type-based name (e.g. "oscsynth", "sampler")
-        // rather than inheriting the track's name — "name"/"synth" here are
-        // track-level options, not meant to reach the synth's constructor.
-        const { name: _trackName, synth: synthType, ...synthOptions } = options;
+        // rather than inheriting the track's name — "name"/"synth"/"out" here
+        // are track-level options, not meant to reach the synth's constructor.
+        const { name: _trackName, synth: synthType, out, ...synthOptions } = options;
         const source = this.createSynth(synthType ?? "oscsynth", synthOptions);
         const track = new NLLCTrack(this.audioContext, source, { name });
-        track.connect(this.master);
+
+        const destName = out ?? "master";
+        const destObject = this._resolveObject(destName);
+        if (!destObject) throw new Error(`unknown destination "${destName}"`);
+        track.connect(destObject, destName);
 
         this.tracks.push(track);
         this.clock.addUnit(source);
         this.clock.addUnit(track);
 
         return track;
+    };
+
+    // Creates a fully-wired bus: a plain NLLCChannel (fader/pan/inserts, no
+    // synth) under its own name namespace, with a default send to master (or
+    // `out=` a different track/bus). A bus exists purely to be a shared
+    // destination other channels can send into (e.g. a shared reverb send,
+    // or a sub-mix of several tracks) — see commands.js's /add_bus and
+    // channelCommand's out=/add_send=/remove_send=.
+    createBus(options = {}) {
+        const name = this._uniqueName(options.name ?? "bus", this.buses.map((b) => b.name));
+        const bus = new NLLCChannel(this.audioContext, { name });
+
+        const destName = options.out ?? "master";
+        const destObject = this._resolveObject(destName);
+        if (!destObject) throw new Error(`unknown destination "${destName}"`);
+        bus.connect(destObject, destName);
+
+        this.buses.push(bus);
+        this.clock.addUnit(bus);
+
+        return bus;
     };
 
     // Swaps a track's synth at runtime (e.g. /track_1 synth=sampler),
@@ -157,21 +183,25 @@ export class NLLC {
         return processor;
     };
 
-    // Fully removes a track: tears down its own processor inserts, disconnects
-    // every node it owns, and deregisters both the track and its synth from
-    // the clock. Returns false (no-op) if the track isn't actually registered.
+    // Fully removes a track: tears down its own processor inserts and sends,
+    // disconnects every node it owns, and deregisters both the track and its
+    // synth from the clock. Returns false (no-op) if the track isn't
+    // actually registered.
     removeTrack(track) {
         const index = this.tracks.indexOf(track);
         if (index === -1) return false;
 
-        // Must run before any disconnect() below — a patch's own disconnect()
-        // targets a specific node/param and throws if that connection was
-        // already severed by a blanket disconnect() first.
+        // Must run before any disconnect() below — a patch/send's own
+        // disconnect() targets a specific node/param and throws if that
+        // connection was already severed by a blanket disconnect() first.
         this._removePatchesReferencing(track);
+        this._removeSendsReferencing(track);
 
         for (const processor of [...track.processors]) {
             this.removeProcessor(processor);
         }
+
+        for (const send of [...track.sends]) track.removeSend(send.id);
 
         track.source.output.disconnect();
         track.input.disconnect();
@@ -180,6 +210,31 @@ export class NLLC {
         this.tracks.splice(index, 1);
         this.clock.removeUnit(track.source);
         this.clock.removeUnit(track);
+
+        return true;
+    };
+
+    // Fully removes a bus: tears down any send any other channel was feeding
+    // into it, its own inserts and sends, and deregisters it from the clock.
+    // Returns false (no-op) if the bus isn't actually registered.
+    removeBus(bus) {
+        const index = this.buses.indexOf(bus);
+        if (index === -1) return false;
+
+        this._removePatchesReferencing(bus);
+        this._removeSendsReferencing(bus);
+
+        for (const processor of [...bus.processors]) {
+            this.removeProcessor(processor);
+        }
+
+        for (const send of [...bus.sends]) bus.removeSend(send.id);
+
+        bus.input.disconnect();
+        bus.gainNode.disconnect();
+
+        this.buses.splice(index, 1);
+        this.clock.removeUnit(bus);
 
         return true;
     };
@@ -243,6 +298,7 @@ export class NLLC {
     _resolveObject(name) {
         if (name === "master") return this.master;
         return this.tracks.find((t) => t.name === name)
+            ?? this.buses.find((b) => b.name === name)
             ?? this.processors.find((p) => p.name === name)
             ?? this.modulators.find((m) => m.name === name);
     };
@@ -314,6 +370,17 @@ export class NLLC {
         for (const patch of [...this.patches]) {
             if (patch.sourceObject === object || patch.destObject === object) {
                 this.removePatch(patch);
+            }
+        }
+    };
+
+    // Disconnects/removes every send feeding into `object` (from any track,
+    // bus, or master) — called when the object itself is torn down, so a
+    // send never outlives the destination it was feeding.
+    _removeSendsReferencing(object) {
+        for (const channel of [...this.tracks, ...this.buses, this.master]) {
+            for (const send of [...channel.sends]) {
+                if (send.destination === object) channel.removeSend(send.id);
             }
         }
     };

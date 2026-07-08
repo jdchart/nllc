@@ -14,8 +14,10 @@ param=value`, `/name help`, ramping, and `at=` deferral all read/write generical
 via `commands.js`'s `applyParams()`.
 
 ```js
-import { NLLCProcessor } from "./processor";
-import { NLLCParam } from "./param";
+// src/lib/scripts/nllc-src/processors/myprocessor.js — non-base processors
+// live in their own processors/ subfolder, one level down from the base classes.
+import { NLLCProcessor } from "../processor";
+import { NLLCParam } from "../param";
 
 export class NLLCMyProcessor extends NLLCProcessor {
     constructor(audioContext, { name = "myprocessor", amount = 0.5 } = {}) {
@@ -55,8 +57,9 @@ export class NLLCMyProcessor extends NLLCProcessor {
   waveshaper curve): don't force it into `NLLCParam` — leave it as a
   constructor-only option instead.
 
-Register it in `nllc.js`'s `PROCESSOR_TYPES` map (`{ myprocessor: NLLCMyProcessor
-}`) — the only other required change. That alone makes `/track_1
+Register it in `nllc.js`'s `PROCESSOR_TYPES` map (`import { NLLCMyProcessor }
+from "./processors/myprocessor"; ... { myprocessor: NLLCMyProcessor }`) — the
+only other required change. That alone makes `/track_1
 add_processor=myprocessor` and `/myprocessor amount=0.8` work, including
 `remove_self`, `help`, ramping (`/myprocessor amount=0.8 3`), and `at=beat`/
 `at=cycle` deferral — no extra code needed beyond the `NLLCParam`.

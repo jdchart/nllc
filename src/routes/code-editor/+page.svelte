@@ -10,6 +10,7 @@
 
     let nllc_instance = $state(null);
     let tracks = $state([]);
+    let buses = $state([]);
     let modulators = $state([]);
     let patches = $state([]);
     let executeCommand = $state((text) => `unrecognized: "${text}" (engine not ready yet)`);
@@ -82,12 +83,13 @@
         tracks = [...nllc.tracks];
         executeCommand = createCommandRouter(nllc);
 
-        // nllc.tracks/modulators/patches are plain (non-reactive) arrays
-        // mutated by console commands (/add_track, /add_modulator, /patch,
-        // .../remove_self, /unpatch); poll and diff each so the mixer picks up
-        // additions/removals, same pattern MixerChannel already uses for its
-        // processor list.
+        // nllc.tracks/buses/modulators/patches are plain (non-reactive) arrays
+        // mutated by console commands (/add_track, /add_bus, /add_modulator,
+        // /patch, .../remove_self, /unpatch); poll and diff each so the mixer
+        // picks up additions/removals, same pattern MixerChannel already uses
+        // for its processor list.
         let trackNames = nllc.tracks.map((t) => t.name).join(",");
+        let busNames = nllc.buses.map((b) => b.name).join(",");
         let modulatorNames = nllc.modulators.map((m) => m.name).join(",");
         let patchIds = nllc.patches.map((p) => p.id).join(",");
         let rafId;
@@ -96,6 +98,12 @@
             if (names !== trackNames) {
                 trackNames = names;
                 tracks = [...nllc.tracks];
+            }
+
+            const busNamesNow = nllc.buses.map((b) => b.name).join(",");
+            if (busNamesNow !== busNames) {
+                busNames = busNamesNow;
+                buses = [...nllc.buses];
             }
 
             const modNames = nllc.modulators.map((m) => m.name).join(",");
@@ -147,7 +155,7 @@
     <div class="mixer-pane" class:resizing style="width: {mixerVisible ? mixerWidth : 44}px">
         {#if nllc_instance}
             {#if mixerVisible}
-                <Mixer nllc={nllc_instance} {tracks} {modulators} {patches} />
+                <Mixer nllc={nllc_instance} {tracks} {buses} {modulators} {patches} />
             {:else}
                 <CollapsedRail nllc={nllc_instance} />
             {/if}

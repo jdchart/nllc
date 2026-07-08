@@ -1,5 +1,5 @@
-import { NLLCProcessor } from "./processor";
-import { NLLCParam } from "./param";
+import { NLLCProcessor } from "../processor";
+import { NLLCParam } from "../param";
 
 // Generates a synthetic impulse response: exponentially-decaying white noise
 // per channel (not a recorded space). `decay` is the exponent of the falloff

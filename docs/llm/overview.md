@@ -2,15 +2,16 @@
 
 NLLC is a browser-based live-coding music environment (SvelteKit + Web Audio API).
 A user types slash-commands into a console; commands create/control **tracks**
-(each wrapping a **synth**), **processors** (effects, inserted into a track's or
-master's chain), **modulators** (continuous control sources, e.g. an LFO, patched
-into any parameter), and **patches** (the connections between a modulator/other
-source and a destination parameter), plus the **master** bus, all playing on a
-shared, looping, lookahead-scheduled **clock**. Conceptually closest to a tiny
-text-driven Max/MSP or SuperCollider. Eventual goal (not yet built): the user
-types natural language instead of commands, and an LLM (via `Ollama()`, currently
-an empty stub) translates it into this same command vocabulary or direct graph
-mutations.
+(each wrapping a **synth**), **buses** (plain channels with no synth, used as
+shared send destinations — a sub-mix or a shared effect), **processors** (effects,
+inserted into a track's/bus's/master's chain), **modulators** (continuous control
+sources, e.g. an LFO, patched into any parameter), and **patches** (the connections
+between a modulator/other source and a destination parameter), plus the
+**master** bus, all playing on a shared, looping, lookahead-scheduled **clock**.
+Conceptually closest to a tiny text-driven Max/MSP or SuperCollider. Eventual
+goal (not yet built): the user types natural language instead of commands, and
+an LLM (via `Ollama()`, currently an empty stub) translates it into this same
+command vocabulary or direct graph mutations.
 
 ## Object model
 
@@ -20,16 +21,27 @@ NLLC                         top-level owner, one per page
 ├── clock: NLLCClock         lookahead scheduler; holds all "units"
 ├── master: NLLCChannel      final bus → audioContext.destination
 ├── tracks: NLLCTrack[]      extends NLLCChannel; each has .source = a synth
+├── buses: NLLCChannel[]     plain channels (no synth), addressable send destinations
 ├── processors: NLLCProcessor[]   flat registry of every processor anywhere
 ├── modulators: NLLCModulator[]   flat registry of every modulator (e.g. an lfo)
 └── patches: NLLCPatch[]     every active "patch cable" (source.output → depth → destParam)
 ```
 
-- **`NLLCChannel`** (base of `master` and every `NLLCTrack`): fader (`params.gain`,
-  0–1 position tapered onto the actual gain), pan (`params.pan`, -1..1), `output`
-  (post-fader signal, usable as a patch source), an ordered insert chain of
-  processors. `_rewireChain()` connects `input → active processors in order →
-  panner → gainNode → destination`.
+- **`NLLCChannel`** (base of `master`, every `NLLCTrack`, and every bus): fader
+  (`params.gain`, 0–1 position tapered onto the actual gain), pan (`params.pan`,
+  -1..1), an ordered insert chain of processors, and a `sends` array — every
+  place this channel's post-fader signal currently feeds. `_rewireChain()`
+  connects `input → active processors in order → panner → gainNode`; from
+  `gainNode`, each entry in `sends` is its own independent `{ id, destination,
+  destName, params: { gain: NLLCParam } }` edge (`gainNode → sendGain →
+  destination.input`), so one channel can feed several places at once at
+  different levels (e.g. dry to master, a wet send to a reverb bus).
+  `connect(destination, destName)` is sugar over this: it clears every existing
+  send and adds a single one at gain 1 — the common case (a fresh track/bus
+  feeds master alone) — while `addSend`/`removeSend` support the general
+  multi-send case. A **bus** is just a plain `NLLCChannel` with no `.source`,
+  created via `/add_bus`, existing purely to be a send destination other
+  channels route into.
 - **`NLLCSynth`** (base of `NLLCOscSynth`, `NLLCSampler`): produces sound. Has
   `events` (`NLLCEvent{beat,pitch,degree,velocity,duration}` — starts **empty**,
   populated via `add_event`), a `trigger(time, event, secondsPerBeat)` method the
@@ -96,15 +108,34 @@ const PROCESSOR_TYPES = { reverb: NLLCReverb, delay: NLLCDelay };
 const MODULATOR_TYPES = { lfo: NLLCLFO };
 ```
 
+Non-base implementations live one folder down from `nllc-src/`, grouped by
+kind — `synths/oscsynth.js`, `synths/sampler.js`; `processors/reverb.js`,
+`processors/delay.js`; `modulators/lfo.js` — while the base classes
+(`synth.js`, `processor.js`, `modulator.js`, `channel.js`, etc.) stay directly
+in `nllc-src/`. A new synth/processor/modulator file goes in the matching
+subfolder (imports the base class as `../synth`/`../processor`/`../modulator`)
+and is registered in `nllc.js` exactly as above — nothing else needs to change.
+There is no folder for buses; a bus is just a plain `NLLCChannel`, not a new
+class.
+
 ## Command surface (full detail: `docs/user/commands.md`)
 
 `/name key=val ...` where `name` is a top-level command (`start`, `stop`,
-`add_track`, `tracks`, `clock`, `add_modulator`, `modulators`, `patch`,
-`unpatch`, `patches`), `master`, a track's name, a processor's name, or a
-modulator's name. Channels support `gain=`, `pan=`, `add_event`,
-`clear_events`, `start`, `stop`, `synth=`, `add_processor=`,
-`remove_processor=`, `remove_self`. Processors and modulators support their
-own `params` keys plus `remove_self`, and `help`/no-args to introspect.
+`add_track`, `tracks`, `add_bus`, `buses`, `clock`, `add_modulator`,
+`modulators`, `patch`, `unpatch`, `patches`), `master`, a track's name, a
+bus's name, a processor's name, or a modulator's name. Channels (tracks,
+buses, master) support `gain=`, `pan=`, `add_event`, `clear_events`, `start`,
+`stop`, `synth=`, `add_processor=`, `remove_processor=`, `remove_self`, plus
+routing: `out=<name>` (replace every current send with a single one to
+`<name>`), `add_send=<name>` (optionally `send_gain=<0-1>`, default 1 — add
+one more send without disturbing existing ones), `remove_send=<id>`, and
+`send=<id>` (optionally `send_gain=<value>`, rampable/`at=` deferrable like
+any param — report or adjust one existing send's own gain). A track's/bus's
+own default send (created at creation time, or via `out=` with no
+destination given) targets `master`. `add_event`/`clear_events`/`start`/
+`stop`/`synth=` are no-ops (reported as "\<name\> has no synth") on master and
+on any bus, since neither has a `.source`. Processors and modulators support
+their own `params` keys plus `remove_self`, and `help`/no-args to introspect.
 `/clock` supports `bpm=` (rampable) and `num_beats=` (deliberately not
 rampable — rejected with a message if given a ramp spec).
 
@@ -131,13 +162,17 @@ becoming `NaN` and corrupting persistent state.
 `src/routes/code-editor/+page.svelte` owns the single `NLLC` instance (created
 client-side only, in `onMount`, since `AudioContext` needs a browser) and the
 `executeCommand` function from `createCommandRouter(nllc)`. `CodeEditor.svelte` is
-the text console; `Mixer.svelte` (with titled "Tracks"/"Modulators" sections, each
-showing "none" when empty) composes `MixerChannel.svelte` (one per track, plus
-master), `ModulatorStrip.svelte` (one per modulator, with a live bipolar meter),
-and `PatchList.svelte` (every active patch, with its live depth and a remove
-control) — all polled, read/write views onto the same live audio-graph objects
-(fader ↔ `channel.params.gain`, pan dial ↔ `channel.params.pan`, etc.). Console
-and mixer are two UIs on one shared state, not separate stores.
+the text console; `Mixer.svelte` (with titled "Tracks"/"Buses"/"Modulators"
+sections, each showing "none" when empty) composes `MixerChannel.svelte` (one
+per track, one per bus, plus master — a bus needs no changes to this component
+since it only ever touches `gainNode`/`pan`/`processors`, all present on any
+`NLLCChannel`), `ModulatorStrip.svelte` (one per modulator, with a live bipolar
+meter), and `PatchList.svelte` (every active patch, with its live depth and a
+remove control) — all polled, read/write views onto the same live audio-graph
+objects (fader ↔ `channel.params.gain`, pan dial ↔ `channel.params.pan`, etc.).
+Console and mixer are two UIs on one shared state, not separate stores. Sends
+are console-only for now — no mixer UI for `add_send=`/`out=` yet, same
+scope choice already made for modulators/patches.
 
 ## Known current limitations (don't assume otherwise)
 
@@ -165,6 +200,19 @@ and mixer are two UIs on one shared state, not separate stores.
   node (e.g. delay's R side) only gets updated correctly by a plain, immediate
   (non-ramped, non-deferred) instant set. Pre-existing limitation, unchanged
   by the `NLLCParam` consolidation.
+- Send routing (`out=`/`add_send=`) only guards against a channel sending
+  directly to itself (`addSend` throws) — a longer cycle (e.g. `bus1` sends to
+  `bus2`, which sends back to `bus1`) isn't detected. Native Web Audio permits
+  cycles only when a `DelayNode` sits somewhere in the loop; a pure-gain cycle
+  is undefined/implementation-behavior rather than a clean error. Not
+  currently validated.
+- Everything is stereo (`NLLCChannel`'s pan uses a `StereoPannerNode`, which is
+  always 2-channel in/out). Nothing else in the signal path hardcodes a
+  channel count — `GainNode`s and sends adapt to whatever arrives — so mono
+  channels or L/R-targeted sends aren't architecturally blocked, just not
+  built: they'd need the panner made optional/pluggable per channel, and a
+  send variant that routes through a `ChannelSplitterNode`/`ChannelMergerNode`
+  pair instead of straight into `destination.input`.
 
 ## Detailed docs
 

@@ -1,11 +1,12 @@
 # NLLC — Natural Language Live Coding
 
 A browser-based live-coding music environment. Type slash-commands into a
-console to create and control synths, samplers, effects, and patchable
-modulators (LFOs and the like, connected into any parameter — a small modular
-synthesis layer), all playing against a shared, looping clock — a small,
-text-driven take on Max/MSP or SuperCollider. The long-term goal is to drive
-it with natural language instead of commands, via a local Ollama model.
+console to create and control synths, samplers, effects, buses (shared send
+destinations for sub-mixes or shared effects), and patchable modulators (LFOs
+and the like, connected into any parameter — a small modular synthesis
+layer), all playing against a shared, looping clock — a small, text-driven
+take on Max/MSP or SuperCollider. The long-term goal is to drive it with
+natural language instead of commands, via a local Ollama model.
 
 Built with SvelteKit + the Web Audio API. See [docs/](docs/) for full
 documentation:

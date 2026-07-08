@@ -14,8 +14,10 @@ into some other object's parameter, so keep its raw output bipolar
 (`-1..1`-ish); depth/centering belong to the *patch*, not the modulator.
 
 ```js
-import { NLLCModulator } from "./modulator";
-import { NLLCParam } from "./param";
+// src/lib/scripts/nllc-src/modulators/mymod.js — non-base modulators live in
+// their own modulators/ subfolder, one level down from the base classes.
+import { NLLCModulator } from "../modulator";
+import { NLLCParam } from "../param";
 
 export class NLLCMyModulator extends NLLCModulator {
     constructor(audioContext, { name = "mymod", rate = 4 } = {}) {
@@ -36,8 +38,9 @@ export class NLLCMyModulator extends NLLCModulator {
 };
 ```
 
-Register it in `nllc.js`'s `MODULATOR_TYPES` map (`{ mymod: NLLCMyModulator }`)
-— the only other required change. That alone makes `/add_modulator
+Register it in `nllc.js`'s `MODULATOR_TYPES` map (`import { NLLCMyModulator }
+from "./modulators/mymod"; ... { mymod: NLLCMyModulator }`) — the only other
+required change. That alone makes `/add_modulator
 type=mymod rate=8 name=mod1`, `/mod1 rate=20 3` (ramping), `/mod1 help`, and
 `/mod1 remove_self` all work, plus `/patch source=mod1 dest=reverb.wet
 depth=0.3` (patching only needs `.output`, so any modulator qualifies as a

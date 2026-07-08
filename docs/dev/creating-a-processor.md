@@ -10,9 +10,10 @@ A simple hard-clip distortion using a `WaveShaperNode`, with one runtime param
 (`wet`):
 
 ```js
-// src/lib/scripts/nllc-src/distortion.js
-import { NLLCProcessor } from "./processor";
-import { NLLCParam } from "./param";
+// src/lib/scripts/nllc-src/processors/distortion.js — non-base processors
+// live in their own processors/ subfolder, one level down from the base classes.
+import { NLLCProcessor } from "../processor";
+import { NLLCParam } from "../param";
 
 function buildCurve(amount) {
     const samples = 1024;
@@ -51,7 +52,7 @@ export class NLLCDistortion extends NLLCProcessor {
 runtime param — see the note below on params that aren't backed by a real
 `AudioParam` at all.)
 
-Points worth noting, all copied from `reverb.js`/`delay.js`:
+Points worth noting, all copied from `processors/reverb.js`/`processors/delay.js`:
 
 - **`this.input`/`this.output` are provided by the base class** — wire your DSP
   chain between them; never create your own input/output nodes.
@@ -77,7 +78,7 @@ Points worth noting, all copied from `reverb.js`/`delay.js`:
   `delayR.delayTime`, the latter offset for stereo width) still fits
   `NLLCParam` — pass whichever node should be the "primary" one (the one
   ramping/`at=` deferral will animate) as the wrapped `AudioParam`, and
-  override the plain instant-set path with `onSet`. See `delay.js` for the
+  override the plain instant-set path with `onSet`. See `processors/delay.js` for the
   real example.
 - **A param that isn't backed by a real `AudioParam` at all** (`amount`
   above, whose "value" is really a `Float32Array` curve that has to be
@@ -103,7 +104,7 @@ Points worth noting, all copied from `reverb.js`/`delay.js`:
 
 ```js
 // nllc.js
-import { NLLCDistortion } from "./distortion";
+import { NLLCDistortion } from "./processors/distortion";
 
 const PROCESSOR_TYPES = {
     reverb: NLLCReverb,

@@ -1,4 +1,4 @@
-import { NLLCSynth } from "./synth";
+import { NLLCSynth } from "../synth";
 
 const SAMPLE_FILES = [
     "CLAUDE - kick02.wav",
