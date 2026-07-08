@@ -73,14 +73,37 @@ That's it — `/add_track synth=pingsynth` and `/track_1 synth=pingsynth` both w
 immediately, with no other code changes, because `createTrack`/`setTrackSynth`
 look the type up in `SYNTH_TYPES` dynamically.
 
-## Optional: self-seeding placeholder events
+## Don't self-seed events
 
-Both existing synths add a few `NLLCEvent`s in their own constructor
-(`this.addEvent(...)`) so a freshly-created instance is audible without any
-event-authoring UI existing yet. This is a convention, not a requirement of the
-base class — but until real event authoring exists (see the open questions in the
-last session summary / `ideas.md`), a new synth with no seeded events will be
-silent until something else pushes events onto it.
+Earlier versions of both existing synths seeded a few `NLLCEvent`s in their own
+constructor so a freshly-created instance was audible with zero authoring. That
+convention is gone now that real event authoring exists (`/track_1 add_event
+...`, see [user/commands.md](../user/commands.md)) — a synth should leave
+`this.events` empty and let the console/UI/LLM populate it. A fresh instance of
+your synth will be silent until something calls `addEvent()` on it, and that's
+expected.
+
+## Optional: resolving `degree` against harmony
+
+If your synth is pitched (like `oscsynth`), consider following its pattern for
+`NLLCEvent.degree`: resolve it against the shared harmony context at trigger
+time instead of always reading `event.pitch` directly, so the synth
+automatically benefits from any future key/scale-changing command:
+
+```js
+import { resolveDegree } from "./harmony";
+
+trigger(time, event, secondsPerBeat) {
+    const midi = event.degree !== undefined ? resolveDegree(this.harmony, event.degree) : event.pitch;
+    // ... use midi instead of event.pitch
+};
+```
+
+`this.harmony` is set by the base `NLLCSynth` constructor (from the `harmony`
+option `NLLC.createSynth` passes in, falling back to a fresh chromatic context
+for standalone use) — you don't need to do anything to receive it. Skip this
+entirely if `pitch` doesn't mean "MIDI note" for your synth (e.g. `sampler`
+treats it as a slot index and never resolves `degree`).
 
 ## Optional: runtime params
 

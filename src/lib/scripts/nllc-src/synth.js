@@ -1,3 +1,5 @@
+import { createHarmonyContext } from "./harmony";
+
 // Base class for every sound-producing voice (see oscsynth.js, sampler.js).
 // A track's `.source` is always an NLLCSynth subclass. Subclasses connect
 // their own Web Audio nodes into the inherited `this.output` GainNode and
@@ -5,12 +7,17 @@
 // flag) is handled generically here so a new synth only needs to implement
 // sound generation.
 export class NLLCSynth {
-    constructor(audioContext, { name = "synth" } = {}) {
+    constructor(audioContext, { name = "synth", harmony } = {}) {
         this.llm_summary = "The basic synth class.";
         this.name = name;
 
         this.audioContext = audioContext;
         this.output = audioContext.createGain();
+
+        // NLLC.createSynth passes its one shared harmony context down so
+        // every synth resolves scale degrees consistently; falls back to a
+        // fresh (chromatic) one for standalone use, e.g. in isolation/tests.
+        this.harmony = harmony ?? createHarmonyContext();
 
         this.events = [];
         this.automation = [];

@@ -59,6 +59,21 @@ disconnected, not just silenced). A track's `input` is fed by its synth's `outpu
 `setSource()`); a track's `gainNode` connects to `master.input`; master's
 `gainNode` connects to `audioContext.destination`.
 
+### Harmony context
+
+`NLLC.harmony` (`{ root, scale }`, from `harmony.js`) is one shared object
+constructed once in the `NLLC` constructor and threaded into every synth via
+`createSynth`'s `{ ...options, harmony: this.harmony }`. An `NLLCEvent` can
+carry `degree` instead of (or alongside) `pitch`; a pitched synth (`oscsynth`)
+resolves `degree` against `this.harmony` inside `trigger()` — i.e. at the
+moment the note actually sounds, not when the event was authored. This is
+deliberate: since every synth holds a *reference* to the same context object,
+mutating its fields in place (once a `/harmony` command exists to do so) would
+retune every pattern using `degree`, live, without touching a single event.
+Today `scale` defaults to chromatic (`[0..11]`), so `degree` behaves as a
+plain semitone offset — the hook is built, but real scale/chord logic and the
+runtime command to change key are deliberately deferred.
+
 ### The clock is a lookahead scheduler over "units"
 
 `NLLCClock.units` is a flat, undifferentiated array of anything with the shape
@@ -87,6 +102,38 @@ by iterating loop indices, not just beat numbers. `NLLCAutomationEvent.once` eve
 on subsequent loops. `unit.active === false` (a track paused via `/track_1 stop`, or
 a bypassed processor) makes the clock skip that unit's events *and* automation
 entirely for that tick.
+
+Both `bpm` and `loopLengthBeats` are runtime-mutable (`setBpm` — glitch-free,
+rebases `startTime` so the current playback beat doesn't jump — and
+`setLoopLengthBeats`, exposed via `/clock bpm= num_beats=`). `_scheduleRange`
+reads both fresh every tick, so a change takes effect on the next tick;
+changing `loopLengthBeats` mid-loop can shift where the current loop boundary
+falls, an accepted live-coding wrinkle rather than a bug. The clock also
+exposes `currentBeat()`, `nextBeatTime()`, and `nextCycleTime()` — the anchor
+points console ramps use to defer their start (see below) rather than firing
+immediately.
+
+### Two ramp-scheduling paths, one curve implementation
+
+`automation.js` has a private `applyRamp(param, time, endTime, from, to, curve)`
+that is the only place that turns a curve name into actual `AudioParam` calls
+(`linearRampToValueAtTime`/`exponentialRampToValueAtTime`/`setTargetAtTime`).
+Two exported functions call into it for two different use cases:
+
+- `scheduleAutomationEvent(time, event, secondsPerBeat)` — the clock calls this
+  directly for `NLLCAutomationEvent`s sitting in a unit's `.automation` array,
+  matched against loop-relative beat position the same way `events` are.
+- `scheduleRamp(audioContext, param, from, to, durationSeconds, { startTime,
+  curve })` — called directly by the command router, **not** registered with
+  the clock at all. This is the vehicle for console ramps (`/track_1 gain=0
+  3`, `/reverb wet=0.9 6b at=beat`): a one-off side effect anchored to an
+  absolute `AudioContext` time (`audioContext.currentTime` by default, or
+  `clock.nextBeatTime()`/`nextCycleTime()` when `at=beat`/`at=cycle` is given)
+  rather than a loop-relative pattern position. The two paths are kept
+  separate deliberately — "ramp starting right now" has no natural
+  loop-relative beat to attach to, and forcing it through the clock's
+  per-tick loop-position matching would add complexity (computing a live
+  "current beat", handling the engine-not-started case) for no benefit.
 
 ## Command router as a third view
 

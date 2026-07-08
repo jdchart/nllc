@@ -15,17 +15,20 @@ inside `trigger()`, don't try to reuse a persistent node across triggers.
 
 ```js
 import { NLLCSynth } from "./synth";
+import { resolveDegree } from "./harmony"; // only if pitch means "MIDI note"
 
 export class NLLCMySynth extends NLLCSynth {
     constructor(audioContext, { name = "mysynth" } = {}) {
         super(audioContext, { name });
         this.llm_summary = "One-line description shown in /track_1 summaries.";
-        // optional: for (const e of placeholderEvents()) this.addEvent(e);
+        // don't seed placeholder events — leave this.events empty; the
+        // console/UI/LLM populates it via add_event
     };
 
     trigger(time, event, secondsPerBeat) {
         const ctx = this.audioContext;
         const durationSeconds = event.duration * secondsPerBeat;
+        const midi = event.degree !== undefined ? resolveDegree(this.harmony, event.degree) : event.pitch;
         // build nodes, schedule at `time`, ramp gain to ~0.0001 exponentially
         // by time + durationSeconds to avoid clicks, connect(...).connect(this.output)
     };
@@ -36,9 +39,13 @@ Register it in `nllc.js`'s `SYNTH_TYPES` map (`{ mysynth: NLLCMySynth }`) — th
 only other required change. That alone makes `/add_track synth=mysynth` and
 `/track_1 synth=mysynth` work.
 
-Optional: seed `this.addEvent(...)` calls in the constructor so a fresh instance
-is audible immediately (both existing synths do this — there's no event-authoring
-UI yet). Optional: populate `this.params` (`{name: {get(),set(value)}}`) for
-runtime-adjustable synth params — note the command router doesn't currently read
-`channel.source.params` (only `processor.params`), so this would need a small
-`commands.js` addition to be reachable from the console today.
+Leave `this.events` empty in the constructor — a fresh instance being silent
+until `add_event` is called is expected, not a bug to work around. If `pitch`
+means "MIDI note" for your synth, resolve `event.degree` via `this.harmony`
+(set automatically by the base class) as shown above so it benefits from any
+future key/scale-changing command; skip this if `pitch` means something else
+(e.g. a sample-slot index, like `NLLCSampler`). Optional: populate
+`this.params` (`{name: {get(),set(value)}}`) for runtime-adjustable synth
+params — note the command router doesn't currently read `channel.source.params`
+(only `processor.params`), so this would need a small `commands.js` addition
+to be reachable from the console today.

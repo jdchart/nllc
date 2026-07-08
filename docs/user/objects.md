@@ -13,8 +13,10 @@ decay over the note's duration.
 |---|---|---|
 | `waveform` | `"sawtooth"` | Any `OscillatorNode.type` value (`sine`, `square`, `sawtooth`, `triangle`). |
 
-Seeds itself with a 4-beat rising placeholder arpeggio so a fresh instance is
-audible immediately: `/add_track name=lead synth=oscsynth waveform=square`.
+Starts with **no events** — silent until you `add_event` onto it (see
+[Events](#events) below): `/add_track name=lead synth=oscsynth waveform=square`
+then `/lead add_event beat=0 pitch=60`. An event's `pitch` is a MIDI note
+number; give `degree=` instead to use the shared harmony context.
 
 ### `sampler` — `NLLCSampler`
 
@@ -35,7 +37,10 @@ silently doesn't sound if triggered):
 | 5 | hat14 |
 
 An event's `pitch` field selects the slot (modulo the slot count, so pitch `6` wraps
-to slot `0`). Seeds itself with a placeholder kick/snare/hat pattern.
+to slot `0`; negative pitches wrap correctly too). Starts with **no events** —
+silent until you `add_event` onto it (see [Events](#events) below). `degree=`
+doesn't apply here — the sampler always reads `pitch` as a slot index, never
+resolves it against the harmony context.
 
 ## Processors (`add_processor=` on any channel)
 
@@ -67,6 +72,28 @@ lines that feed back into *each other* (ping-pong) rather than themselves.
 | `feedback` | `0.35` | `feedback` | Cross-feedback amount (applied symmetrically to both channels). |
 | `wet` | `0.3` | `wet` | Wet-signal mix level (0–1). |
 | `stereoOffset` | `0.06`s | — | Extra delay time on the right channel for stereo width. Creation-only, not currently exposed as a runtime param. |
+
+## Events
+
+A synth's pattern is a list of events, authored with `/track_1 add_event ...`
+(see [commands.md](commands.md)) — a fresh track's synth starts with none.
+Each event has:
+
+| Field | Default | Meaning |
+|---|---|---|
+| `beat` | `0` | Loop-relative position (`0` to the clock's `num_beats`, see [commands.md](commands.md#top-level-commands)). |
+| `pitch` | `60` if neither `pitch=` nor `degree=` given | A raw MIDI note number (`oscsynth`) or sample-slot index (`sampler`). |
+| `degree` | — | A scale-degree, resolved against the shared harmony context **at the moment the note is triggered**, not when `add_event` was run. Only meaningful for `oscsynth`; `sampler` ignores it. |
+| `velocity` | `1` | 0–1, used as the note's peak gain. |
+| `duration` | `0.25` | In beats, not seconds — the clock converts using the current tempo at trigger time. |
+
+The harmony context (`root`/`scale`) currently defaults to chromatic — every
+semitone is in the scale — so `degree` behaves as a plain semitone offset from
+`root` (MIDI 60). There's no `/harmony` command yet to change the key/scale at
+runtime; that's a deferred piece of a larger scale/chord system. The point of
+resolving `degree` at trigger time rather than baking in a pitch when the
+event is authored is so that once real scale-switching exists, changing the
+key will retune a pattern that's already scheduled and playing.
 
 ## Gain taper
 

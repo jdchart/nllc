@@ -18,17 +18,23 @@ export function createCommandRouter(nllc) {
             return `created ${track.name}`;
         },
         tracks: () => { /* ... */ },
+        clock: (params) => { /* see the real one — bpm=/num_beats=, reports current values with no params */ },
 
-        // add a new one:
-        bpm: (params) => {
-            if (!("value" in params)) return `bpm is ${nllc.clock.bpm}`;
-            nllc.clock.setBpm(Number(params.value));
-            return `bpm set to ${nllc.clock.bpm}`;
+        // add a new one, following the same "no params = report status" shape:
+        seed: (params) => {
+            if (!("value" in params)) return `seed is ${nllc.randomSeed}`;
+            nllc.randomSeed = Number(params.value);
+            return `seed set to ${nllc.randomSeed}`;
         },
     };
     // ...
 };
 ```
+
+(The real `/clock` command is a good template to read directly in
+`commands.js` — it shows the "no params = report current state, else apply
+each given param and collect a result message per param" shape used
+throughout.)
 
 Each handler receives the parsed `params` object (from `parseCommand`) and returns
 a string that gets echoed into the console log (or throws/returns nothing — see
@@ -79,11 +85,38 @@ entirely new *kind* of addressable object (not a track, not a processor), you'd
 extend this dispatch chain in `executeCommand` itself, following the same
 `track ? run(...) : ...` shape already there for tracks/processors.
 
+## Multiple commands per submitted line
+
+`executeCommand(text)` (returned by `createCommandRouter`) first calls
+`splitCommands(text)`, which finds every `/name` occurrence in the submitted
+line and dispatches each segment independently through the normal path,
+joining their results with newlines. This is what lets
+`/track_1 gain=0 8 /reverb wet=0.9 6b` run both together, scheduled off the
+same instant (they execute synchronously in one call stack). You don't need to
+do anything for a new command to participate in this — it's purely a
+preprocessing step before dispatch. It does assume no param value contains a
+literal `/`; none currently do.
+
+## Ramp specs and the `at=` scheduling hint
+
+If your new param should be rampable the same way `gain=`/`pan=`/any processor
+param already are, don't reinvent the parsing — `parseCommand` already turns
+`key=<value> <duration>[b]` into `params[key] = { value, duration, unit }`
+instead of a plain scalar (`unit` is `"seconds"` or `"beats"`). Use the
+existing helpers: `isRamp(params[key])` to check which shape you got,
+`rampSeconds(nllc.clock, params[key])` to resolve the duration against tempo,
+and `resolveStartTime(nllc.clock, params.at)` to turn an optional `at=beat`/
+`at=cycle` into an absolute `AudioContext` startTime for `scheduleRamp()` (see
+`channelCommand`'s `gain`/`pan` handling for the full pattern, including
+surfacing `resolveStartTime`'s `warning` for an unrecognized `at=` value).
+Remember to skip the `at` key in any generic `Object.entries(params)` loop
+(see `processorCommand`) — it isn't itself a settable param.
+
 ## Parsing details you probably don't need to touch
 
-`parseCommand(text)` (tokenizing `/name key=val key2="quoted val"`) and
-`parseValue(raw)` (number/boolean/quoted-string coercion) are generic and already
-used by every command — new commands get quoting, optional `=` spacing, and
-type coercion for free. Only touch these if you need a fundamentally new syntax
-shape (e.g. positional args, or `ideas.md`'s proposed `gain=lfo 2 -1 1` mini
-DSL) rather than another `key=value` pair.
+`parseCommand(text)` (tokenizing `/name key=val key2="quoted val"`, including
+the ramp-duration extension above) and `parseValue(raw)` (number/boolean/
+quoted-string coercion) are generic and already used by every command — new
+commands get quoting, optional `=` spacing, type coercion, and ramp parsing
+for free. Only touch these if you need a fundamentally new syntax shape (e.g.
+positional args) rather than another `key=value` pair.

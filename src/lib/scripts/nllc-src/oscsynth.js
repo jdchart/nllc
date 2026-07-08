@@ -1,26 +1,19 @@
 import { NLLCSynth } from "./synth";
-import { NLLCEvent } from "./event";
+import { resolveDegree } from "./harmony";
 
 // Converts a MIDI note number to frequency in Hz (A4 = MIDI 69 = 440Hz).
 function midiToFreq(midi) {
     return 440 * Math.pow(2, (midi - 69) / 12);
 };
 
-// A short rising arpeggio so a freshly-created synth is audible right away;
-// real event authoring is a separate future step.
-function placeholderEvents() {
-    return [0, 1, 2, 3].map((beat) => new NLLCEvent({ beat, pitch: 48 + beat * 2, velocity: 0.5, duration: 0.5 }));
-};
-
 // The default synth type: one oscillator per note, event.pitch treated as a
-// MIDI note number.
+// MIDI note number. Starts with an empty pattern — see commands.js's
+// add_event/clear_events for authoring events onto it.
 export class NLLCOscSynth extends NLLCSynth {
     constructor(audioContext, { name = "oscsynth", waveform = "sawtooth" } = {}) {
         super(audioContext, { name });
         this.llm_summary = "A basic subtractive synth voice: single oscillator per note into a gain envelope.";
         this.waveform = waveform;
-
-        for (const event of placeholderEvents()) this.addEvent(event);
     };
 
     // Builds one voice per note: an oscillator through a gain envelope (a fast
@@ -30,10 +23,11 @@ export class NLLCOscSynth extends NLLCSynth {
     trigger(time, event, secondsPerBeat) {
         const ctx = this.audioContext;
         const durationSeconds = event.duration * secondsPerBeat;
+        const midi = event.degree !== undefined ? resolveDegree(this.harmony, event.degree) : event.pitch;
 
         const osc = ctx.createOscillator();
         osc.type = this.waveform;
-        osc.frequency.setValueAtTime(midiToFreq(event.pitch), time);
+        osc.frequency.setValueAtTime(midiToFreq(midi), time);
 
         const voiceGain = ctx.createGain();
         voiceGain.gain.setValueAtTime(0, time);

@@ -13,28 +13,56 @@ as equal loudness steps. Used by the command router (`channelCommand`) and by
 
 ## `event.js`
 
-`NLLCEvent({ beat, pitch = 60, velocity = 1, duration = 0.25 })` — a plain data
-object, one entry in a synth's `events` array. `beat` is loop-relative (0 to
-`loopLengthBeats`). No behavior; synths interpret `pitch`/`velocity`/`duration`
-however they like (`NLLCOscSynth` treats `pitch` as MIDI note; `NLLCSampler`
-treats it as a sample-slot index).
+`NLLCEvent({ beat, pitch, degree, velocity = 1, duration = 0.25 })` — a plain
+data object, one entry in a synth's `events` array. `beat` is loop-relative (0
+to `loopLengthBeats`). `pitch` defaults to `60` only if neither `pitch` nor
+`degree` is given (so a `degree`-only event doesn't also carry a stale default
+pitch). No other behavior; synths interpret `pitch`/`degree`/`velocity`/
+`duration` however they like (`NLLCOscSynth` treats `pitch` as a MIDI note and
+resolves `degree` against the shared harmony context at trigger time, see
+[harmony.js](#harmonyjs); `NLLCSampler` treats `pitch` as a sample-slot index
+and ignores `degree` entirely).
+
+## `harmony.js`
+
+`createHarmonyContext()` returns `{ root, scale }` (default: root `60`, a
+chromatic `scale` — every semitone). `resolveDegree(harmony, degree)` maps a
+(possibly negative, possibly multi-octave) scale-degree to a MIDI note number,
+wrapping into higher/lower octaves via `scale.length`. This is the hook only —
+chromatic `scale` makes `degree` behave as a plain semitone offset from `root`
+until real scale/chord logic (and a `/harmony` console command to change
+`root`/`scale` at runtime) gets built. `NLLC` constructs one shared instance
+and threads it into every synth (see [architecture.md](architecture.md#harmony-context)).
 
 ## `automation.js`
 
 `NLLCAutomationEvent({ beat, duration, target, from, to, curve, once })` — a
 parameter ramp. `target` is a real `AudioParam` (e.g. `track.volume`,
-`reverb.wet`). `scheduleAutomationEvent(time, event, secondsPerBeat)` is the
-free function that actually calls the Web Audio ramp methods
+`reverb.wet`). A private `applyRamp(param, time, endTime, from, to, curve)` is
+the one place that turns a curve name into actual Web Audio ramp calls
 (`linearRampToValueAtTime` / `exponentialRampToValueAtTime` / `setTargetAtTime`
 for `curve: "target"`, an exponential approach useful for smoother/asymptotic
-moves); it's called directly by `NLLCClock`, not by the owning object.
+moves). Two exported functions call into it:
+`scheduleAutomationEvent(time, event, secondsPerBeat)`, called directly by
+`NLLCClock` for loop-position pattern automation, and
+`scheduleRamp(audioContext, param, from, to, durationSeconds, { startTime,
+curve })`, called directly by the command router for one-off console ramps
+(`/track_1 gain=0 3`) — anchored to an absolute time (`audioContext.currentTime`
+by default) rather than a loop-relative beat, and never registered with the
+clock. See [architecture.md](architecture.md#two-ramp-scheduling-paths-one-curve-implementation).
 
 ## `clock.js` — `NLLCClock`
 
 The scheduler. See [architecture.md](architecture.md#the-clock-is-a-lookahead-scheduler-over-units)
 for the full model. Key surface: `addUnit`/`removeUnit`, `start`/`stop`,
 `setBpm(bpm)` (glitch-free — preserves the current playback beat across a tempo
-change while running), `beatToTime(beat)`.
+change while running), `setLoopLengthBeats(beats)` (changes the loop length;
+no rebasing needed since `_scheduleRange` reads it fresh every tick), both
+exposed via `/clock bpm= num_beats=`. `beatToTime(beat)` converts a beat
+position to an absolute `AudioContext` timestamp; `currentBeat()`,
+`nextBeatTime()`, and `nextCycleTime()` compute the live playback position and
+the next beat/loop-boundary timestamps — the anchor points `scheduleRamp`'s
+`startTime` uses for `at=beat`/`at=cycle`.
 
 ## `channel.js` — `NLLCChannel`
 
@@ -64,9 +92,10 @@ routing sense), and a no-op `trigger()` for subclasses to override.
 ## `oscsynth.js` — `NLLCOscSynth extends NLLCSynth`
 
 One `OscillatorNode` + envelope `GainNode` per triggered note (see
-[objects.md](../user/objects.md) for the envelope shape). Seeds itself with a
-placeholder arpeggio in its constructor via `placeholderEvents()` so a fresh
-instance is audible with zero authoring.
+[objects.md](../user/objects.md) for the envelope shape). `trigger()` resolves
+`event.degree` via `resolveDegree(this.harmony, event.degree)` when present,
+falling back to `event.pitch` otherwise. Starts with an empty `events` array —
+see [commands.md](../user/commands.md) for `add_event`/`clear_events`.
 
 ## `sampler.js` — `NLLCSampler extends NLLCSynth`
 
@@ -75,8 +104,9 @@ Loads `SAMPLE_FILES` (hardcoded list, from `static/samples/`) into `slots` via
 Loading is async and **not awaited** by anything (`this._loaded` is stored but
 never checked before `trigger()` — a hit that lands before its buffer finishes
 loading just silently no-ops). `trigger()` mod-wraps `event.pitch` into a valid
-slot index (handles negative pitches correctly, not just `%`). Also self-seeds a
-placeholder pattern.
+slot index (handles negative pitches correctly, not just `%`); `event.degree`
+is ignored entirely (pitch is always a slot index here, never resolved against
+harmony). Starts with an empty `events` array, same as `NLLCOscSynth`.
 
 ## `processor.js` — `NLLCProcessor` (base)
 
@@ -107,11 +137,17 @@ and raw-`AudioParam` getters, same pattern as `NLLCReverb`.
 ## `commands.js`
 
 No classes — a closure-based router. `parseCommand(text)` is the tokenizer
-(regex-based key=value parser with quoting and optional `=` whitespace, see
-[user/commands.md](../user/commands.md#syntax)); `channelCommand`/
-`processorCommand` are the two shapes of object the router knows how to talk to;
-`createCommandRouter(nllc)` ties it together into the single `executeCommand`
-function the UI calls. See [adding-commands.md](adding-commands.md).
+(regex-based key=value parser with quoting, optional `=` whitespace, and an
+optional trailing duration token that turns a value into a ramp spec
+`{ value, duration, unit }` — see [user/commands.md](../user/commands.md#syntax));
+`isRamp()`/`rampSeconds()`/`resolveStartTime()` are the small shared helpers
+`channelCommand` and `processorCommand` both use to turn a ramp spec into a
+`scheduleRamp()` call, including resolving `at=beat`/`at=cycle` against the
+clock. `channelCommand`/`processorCommand` are the two shapes of object the
+router knows how to talk to; `createCommandRouter(nllc)` ties it together into
+`executeCommand`, which first splits one submitted line into multiple `/name
+...` segments (`splitCommands`, letting `/track_1 gain=0 8 /reverb wet=0.9 6b`
+run both together) before dispatching each. See [adding-commands.md](adding-commands.md).
 
 ## `nllc.js` — `NLLC`
 
@@ -123,6 +159,9 @@ The top-level object and factory/registry hub:
   here** (plus the import) — nothing else in the engine needs to know about it.
 - `createTrack`/`createSynth`/`createProcessor` — construct + register (with the
   clock, and with `tracks`/`processors` for name-based lookup) in one call.
+  `createSynth` also threads `this.harmony` (one shared context constructed
+  once in the `NLLC` constructor, see [harmony.js](#harmonyjs)) into every
+  synth it builds.
 - `setTrackSynth` — swap a track's synth at runtime (used by `/track_1
   synth=sampler`), correctly deregistering the old synth from the clock and
   registering the new one.

@@ -88,6 +88,12 @@ Points worth noting, all copied from `reverb.js`/`delay.js`:
   you don't need to check `this.active` yourself inside the processor; when
   bypassed, the channel simply doesn't connect your `input`/`output` into the
   chain at all.
+- **Any raw-`AudioParam` getter automatically gets console ramp support for
+  free.** `processorCommand` (`commands.js`) is generic over `params` for both
+  instant sets and ramps (`/myprocessor amount=0.8 3`, `at=beat`/`at=cycle`) —
+  it reaches the `AudioParam` via `processor[key]` (your getter), not through
+  `params[key].get()/.set()`. No extra code needed beyond exposing the getter,
+  same as for `NLLCAutomationEvent` targets above.
 
 ## Registering it
 

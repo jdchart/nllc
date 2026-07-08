@@ -16,26 +16,46 @@ export class NLLCAutomationEvent {
     };
 };
 
-// Applies one automation event's ramp to its target AudioParam starting at
-// `time`. `curve` selects the ramp shape: "linear" (constant rate),
-// "exponential" (clamped away from 0, since exponential ramps can't reach it),
-// or "target" (an asymptotic approach via setTargetAtTime, using a quarter of
-// the event's duration as the time constant for a smoother settle).
-export function scheduleAutomationEvent(time, event, secondsPerBeat) {
-    const endTime = time + event.duration * secondsPerBeat;
-    const param = event.target;
-
+// Draws one ramp on `param` between `time` and `endTime`. The one place that
+// knows how to turn a curve name into actual AudioParam calls — shared by
+// scheduleAutomationEvent (loop-position pattern automation) and scheduleRamp
+// (one-off console ramps) so the two can't drift apart. `curve` selects the
+// shape: "linear" (constant rate), "exponential" (clamped away from 0, since
+// exponential ramps can't reach it), or "target" (an asymptotic approach via
+// setTargetAtTime, using a quarter of the span as the time constant for a
+// smoother settle).
+function applyRamp(param, time, endTime, from, to, curve) {
     param.cancelScheduledValues(time);
 
-    if (event.curve === "exponential") {
-        // exponential ramps can't touch 0, so clamp both ends
-        param.setValueAtTime(Math.max(event.from, 0.0001), time);
-        param.exponentialRampToValueAtTime(Math.max(event.to, 0.0001), endTime);
-    } else if (event.curve === "target") {
-        param.setValueAtTime(event.from, time);
-        param.setTargetAtTime(event.to, time, (endTime - time) / 4);
+    if (curve === "exponential") {
+        param.setValueAtTime(Math.max(from, 0.0001), time);
+        param.exponentialRampToValueAtTime(Math.max(to, 0.0001), endTime);
+    } else if (curve === "target") {
+        param.setValueAtTime(from, time);
+        param.setTargetAtTime(to, time, (endTime - time) / 4);
     } else {
-        param.setValueAtTime(event.from, time);
-        param.linearRampToValueAtTime(event.to, endTime);
+        param.setValueAtTime(from, time);
+        param.linearRampToValueAtTime(to, endTime);
     }
+};
+
+// Applies one automation event's ramp to its target AudioParam starting at
+// `time` (an absolute AudioContext timestamp the clock computed from the
+// event's loop-relative beat).
+export function scheduleAutomationEvent(time, event, secondsPerBeat) {
+    const endTime = time + event.duration * secondsPerBeat;
+    applyRamp(event.target, time, endTime, event.from, event.to, event.curve);
+};
+
+// Ramps a raw AudioParam from `from` to `to` over `durationSeconds`, starting
+// at `startTime` (an absolute AudioContext timestamp; defaults to right now).
+// This is the vehicle for one-off console ramps like `/track_1 gain=0 3` (see
+// commands.js) — distinct from scheduleAutomationEvent's loop-position
+// pattern automation, though both draw the curve identically via applyRamp.
+// Passing an explicit `startTime` (e.g. clock.nextBeatTime()/nextCycleTime())
+// is how a ramp gets deferred to the next beat/cycle instead of firing
+// immediately.
+export function scheduleRamp(audioContext, param, from, to, durationSeconds, { startTime, curve = "linear" } = {}) {
+    const time = startTime ?? audioContext.currentTime;
+    applyRamp(param, time, time + durationSeconds, from, to, curve);
 };

@@ -5,6 +5,7 @@ import { NLLCReverb } from "./reverb";
 import { NLLCDelay } from "./delay";
 import { NLLCOscSynth } from "./oscsynth";
 import { NLLCSampler } from "./sampler";
+import { createHarmonyContext } from "./harmony";
 
 // String-keyed registries that map a command/UI-facing type name to a class.
 // Adding a new synth or processor type means adding one entry here (plus the
@@ -42,6 +43,12 @@ export class NLLC {
         this.tracks = [];
         this.processors = [];
         this._processorIdCounter = 0;
+
+        // One shared context every synth resolves NLLCEvent.degree against
+        // (see harmony.js) — mutate its fields in place (once a /harmony
+        // command exists) rather than replacing this object, so synths that
+        // already hold a reference stay in sync.
+        this.harmony = createHarmonyContext();
 
         this.clock = new NLLCClock(this.audioContext);
         this.clock.addUnit(this.master);
@@ -81,7 +88,7 @@ export class NLLC {
             throw new Error(`unknown synth type "${type}"`);
         }
 
-        return new SynthClass(this.audioContext, options);
+        return new SynthClass(this.audioContext, { ...options, harmony: this.harmony });
     };
 
     // Creates a fully-wired track: a unique name, a synth (default

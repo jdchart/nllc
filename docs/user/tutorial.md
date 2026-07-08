@@ -18,15 +18,16 @@ right (with a collapse arrow between them, and a drag-to-resize handle).
 ## Your first sounds
 
 The app starts with one demo track already set up (`track_1`, an oscillator synth
-with a reverb insert, fading in over the first few beats) but the engine itself is
-off. Type into the console and press Enter to run a command:
+with a reverb insert and a short rising arpeggio, fading in over the first few
+beats) but the engine itself is off. Type into the console and press Enter to run
+a command:
 
 ```
 /start
 ```
 
-You should hear `track_1`'s placeholder arpeggio loop, fading in. The mixer's master
-strip (far right) will show the power light pulsing on each loop and a level meter.
+You should hear `track_1`'s arpeggio loop, fading in. The mixer's master strip (far
+right) will show the power light pulsing on each loop and a level meter.
 
 Now add a drum track:
 
@@ -35,8 +36,54 @@ Now add a drum track:
 ```
 
 This creates a second track using the sample-based synth instead of the default
-oscillator, and it starts playing its own placeholder kick/snare/hat pattern
-immediately — every track loops independently against the same clock.
+oscillator — every track loops independently against the same clock. A fresh
+track's synth always starts with **no events**, so `drums` is silent until you
+author a pattern onto it (next section).
+
+## Authoring events
+
+Every track's synth has an event list you build up with `add_event`. For a
+`sampler`, `pitch` selects a slot (0 = first sample, wrapping if out of range):
+
+```
+/drums add_event beat=0 pitch=0 velocity=0.9 duration=0.25
+/drums add_event beat=1 pitch=2 velocity=0.8 duration=0.25
+/drums add_event beat=2 pitch=0 velocity=0.9 duration=0.25
+/drums add_event beat=3 pitch=2 velocity=0.8 duration=0.25
+```
+
+That's a basic four-on-the-floor kick/snare pattern (`pitch=0`/`pitch=2` are the
+first two sample slots — see [objects.md](objects.md) for the full slot list).
+Every field but `beat` is optional. For `oscsynth`, use `pitch=<midi note>` for a
+raw pitch, or `degree=<n>` to use a scale-degree resolved against the shared
+harmony context instead (see [objects.md](objects.md#events)):
+
+```
+/track_1 add_event beat=0 degree=0 velocity=0.6 duration=0.5
+/track_1 add_event beat=2 degree=4 velocity=0.6 duration=0.5
+```
+
+Clear a track's pattern entirely with `/drums clear_events`.
+
+## Tempo and loop length
+
+The whole pattern loops over a fixed number of beats at a given tempo — both
+adjustable at runtime with `/clock`:
+
+```
+/clock
+```
+```
+bpm=120 num_beats=4
+```
+
+```
+/clock bpm=140
+/clock num_beats=8
+```
+
+Changing `num_beats` while the engine is running can shift where the loop
+boundary currently falls — an accepted live-coding glitch, not a bug.
 
 ## Controlling tracks
 
@@ -69,6 +116,30 @@ List every track at once:
 
 ```
 /tracks
+```
+
+## Ramps
+
+Add a trailing duration to `gain=`/`pan=` (or any processor param, see
+[Effects](#effects) below) to ramp instead of jumping instantly:
+
+```
+/drums gain=0 3        fade drums out over 3 seconds
+/drums gain=0.6 4b      fade back in over 4 beats ("b" = beats, no suffix = seconds)
+```
+
+By default a ramp starts the instant you hit Enter. Add `at=beat` or `at=cycle`
+to line it up with the next beat or the next loop boundary instead — handy for
+keeping changes musically in time rather than landing mid-phrase:
+
+```
+/drums gain=0 4b at=cycle
+```
+
+You can also fire several commands from one line, all together:
+
+```
+/track_1 gain=0 8 /drums gain=0 8
 ```
 
 ## Effects

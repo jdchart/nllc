@@ -40,4 +40,6 @@ Register it in `nllc.js`'s `PROCESSOR_TYPES` map (`{ myprocessor: NLLCMyProcesso
 }`) — the only other required change. That alone makes `/track_1
 add_processor=myprocessor` and `/myprocessor amount=0.8` work, including
 `remove_self` and `help`, since `processorCommand` in `commands.js` is fully
-generic over `params`.
+generic over `params`. Any param with a raw-`AudioParam` getter also gets
+console ramp support for free — `/myprocessor amount=0.8 3` or `at=beat`/
+`at=cycle` — no extra code needed beyond the getter.

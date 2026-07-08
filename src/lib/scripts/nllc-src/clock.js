@@ -65,10 +65,39 @@ export class NLLCClock {
         }
     };
 
+    // Unlike setBpm, no rebasing is needed: _scheduleRange reads
+    // loopLengthBeats fresh on every tick, so this takes effect on the next
+    // tick. A change mid-loop can shift where the current loop boundary
+    // falls, which is an accepted live-coding wrinkle rather than a bug.
+    setLoopLengthBeats(beats) {
+        this.loopLengthBeats = beats;
+    };
+
     // Converts a beat position (loop-relative or absolute) into an absolute,
     // precise AudioContext timestamp suitable for scheduling.
     beatToTime(beat) {
         return this.startTime + beat * this.secondsPerBeat;
+    };
+
+    // The absolute (non-loop-relative) beat position right now.
+    currentBeat() {
+        return (this.audioContext.currentTime - this.startTime) / this.secondsPerBeat;
+    };
+
+    // The AudioContext time of the next upcoming integer beat boundary —
+    // the anchor point for deferring a console ramp to "the next beat"
+    // instead of firing immediately (see automation.js's scheduleRamp
+    // `startTime` option).
+    nextBeatTime() {
+        return this.beatToTime(Math.floor(this.currentBeat()) + 1);
+    };
+
+    // The AudioContext time of the next loop boundary (the start of the next
+    // pass through the pattern) — the anchor point for deferring a console
+    // ramp to "the next cycle".
+    nextCycleTime() {
+        const currentLoopIndex = Math.floor(this.currentBeat() / this.loopLengthBeats);
+        return this.beatToTime((currentLoopIndex + 1) * this.loopLengthBeats);
     };
 
     // Runs once per lookaheadMs: schedules anything due in the next

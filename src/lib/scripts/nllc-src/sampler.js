@@ -1,5 +1,4 @@
 import { NLLCSynth } from "./synth";
-import { NLLCEvent } from "./event";
 
 const SAMPLE_FILES = [
     "CLAUDE - kick02.wav",
@@ -16,27 +15,10 @@ function sampleName(filename) {
     return filename.replace(/^CLAUDE - /, "").replace(/\.\w+$/, "");
 };
 
-// A basic kick/snare/hat placeholder pattern so a freshly-created sampler is
-// audible right away; real event authoring is a separate future step.
-function placeholderEvents() {
-    const kick = { pitch: 0, velocity: 0.9, duration: 0.25 };
-    const snare = { pitch: 2, velocity: 0.8, duration: 0.25 };
-    const hat = { pitch: 4, velocity: 0.5, duration: 0.15 };
-
-    return [
-        new NLLCEvent({ beat: 0, ...kick }),
-        new NLLCEvent({ beat: 1, ...snare }),
-        new NLLCEvent({ beat: 2, ...kick }),
-        new NLLCEvent({ beat: 3, ...snare }),
-        new NLLCEvent({ beat: 0.5, ...hat }),
-        new NLLCEvent({ beat: 1.5, ...hat }),
-        new NLLCEvent({ beat: 2.5, ...hat }),
-        new NLLCEvent({ beat: 3.5, ...hat }),
-    ];
-};
-
 // A drum-machine-style synth: a fixed set of loaded sample buffers ("slots"),
-// where an event's pitch selects which one to play.
+// where an event's pitch selects which one to play. Starts with an empty
+// pattern — see commands.js's add_event/clear_events for authoring events
+// onto it (pitch selects a slot index, not a MIDI note).
 export class NLLCSampler extends NLLCSynth {
     constructor(audioContext, { name = "sampler", samples = SAMPLE_FILES } = {}) {
         super(audioContext, { name });
@@ -53,8 +35,6 @@ export class NLLCSampler extends NLLCSynth {
         // whose buffer hasn't finished loading yet silently does nothing
         // (see trigger()'s `if (!slot?.buffer) return`) rather than queuing.
         this._loaded = this._loadAll();
-
-        for (const event of placeholderEvents()) this.addEvent(event);
     };
 
     // Fetches and decodes every sample file in parallel, filling in each

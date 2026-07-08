@@ -5,6 +5,7 @@
     import CollapsedRail from "$lib/components/mixer/CollapsedRail.svelte";
     import { NLLC } from "$lib/scripts/nllc-src/nllc";
     import { NLLCAutomationEvent } from "$lib/scripts/nllc-src/automation";
+    import { NLLCEvent } from "$lib/scripts/nllc-src/event";
     import { createCommandRouter } from "$lib/scripts/nllc-src/commands";
 
     let nllc_instance = $state(null);
@@ -45,6 +46,13 @@
         const track = nllc.createTrack({ name: "track_1" });
         const reverb = nllc.createProcessor("reverb", { wet: 0.35 });
         track.addProcessor(reverb);
+
+        // Synths start with an empty pattern now (see NLLCSynth) — author a
+        // short rising arpeggio directly so the demo track is still audible.
+        // Equivalent console form: /track_1 add_event beat=0 pitch=48 velocity=0.5 duration=0.5
+        for (const beat of [0, 1, 2, 3]) {
+            track.source.addEvent(new NLLCEvent({ beat, pitch: 48 + beat * 2, velocity: 0.5, duration: 0.5 }));
+        }
 
         // fade the track in over the first 4 beats, then hold at full volume
         track.addAutomation(new NLLCAutomationEvent({
