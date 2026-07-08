@@ -1,4 +1,5 @@
 import { NLLCProcessor } from "./processor";
+import { NLLCParam } from "./param";
 
 // A stereo ping-pong delay: independent left/right delay lines whose feedback
 // crosses to the *opposite* channel (L's tail feeds R's delay line and vice
@@ -46,40 +47,40 @@ export class NLLCDelay extends NLLCProcessor {
         merger.connect(this.wetGain);
         this.wetGain.connect(this.output);
 
-        // Console/UI-facing control surface (see commands.js's processorCommand).
+        // Console/UI-facing control surface (see commands.js's applyParams).
+        // time/feedback each drive two nodes (the R side, offset for time),
+        // so they use onSet to fan the instant-set path out correctly; the
+        // "primary" AudioParam (L side) is still what ramping/deferred at=
+        // scheduling animates directly — see NLLCParam.
         this.params = {
-            time: {
-                get: () => this.delayL.delayTime.value,
-                set: (value) => {
+            time: new NLLCParam(this.delayL.delayTime, {
+                onSet: (value) => {
                     this.delayL.delayTime.value = value;
                     this.delayR.delayTime.value = value + this.stereoOffset;
                 },
-            },
-            feedback: {
-                get: () => this.feedbackL.gain.value,
-                set: (value) => {
+            }),
+            feedback: new NLLCParam(this.feedbackL.gain, {
+                onSet: (value) => {
                     this.feedbackL.gain.value = value;
                     this.feedbackR.gain.value = value;
                 },
-            },
-            wet: {
-                get: () => this.wetGain.gain.value,
-                set: (value) => { this.wetGain.gain.value = value; },
-            },
+            }),
+            wet: new NLLCParam(this.wetGain.gain),
         };
     };
 
-    // Raw AudioParam accessors, so these params can also be used as
-    // NLLCAutomationEvent targets (ramped over time), not just set instantly.
+    // Thin aliases onto params.*'s own AudioParams (not second
+    // implementations) so these can also be used directly as
+    // NLLCAutomationEvent targets, e.g. delay.wet in a pattern-automation call.
     get time() {
-        return this.delayL.delayTime;
+        return this.params.time.audioParam;
     };
 
     get feedback() {
-        return this.feedbackL.gain;
+        return this.params.feedback.audioParam;
     };
 
     get wet() {
-        return this.wetGain.gain;
+        return this.params.wet.audioParam;
     };
 };

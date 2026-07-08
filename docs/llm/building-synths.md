@@ -45,7 +45,9 @@ means "MIDI note" for your synth, resolve `event.degree` via `this.harmony`
 (set automatically by the base class) as shown above so it benefits from any
 future key/scale-changing command; skip this if `pitch` means something else
 (e.g. a sample-slot index, like `NLLCSampler`). Optional: populate
-`this.params` (`{name: {get(),set(value)}}`) for runtime-adjustable synth
-params — note the command router doesn't currently read `channel.source.params`
-(only `processor.params`), so this would need a small `commands.js` addition
-to be reachable from the console today.
+`this.params` with `NLLCParam`s (`param.js`) for runtime-adjustable synth
+params, the same way a processor does (see `docs/llm/building-processors.md`)
+— note the command router doesn't currently read `channel.source.params`
+through `applyParams()` the way it does `processor.params`/`modulator.params`,
+so this would need a small `commands.js` addition to be reachable from the
+console today.

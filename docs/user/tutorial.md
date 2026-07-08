@@ -173,14 +173,60 @@ strikethrough when off), or remove it entirely:
 /drums remove_processor=p2
 ```
 
+## Modulators and patching
+
+So far every parameter change has been you typing a value or a ramp. A
+**modulator** is a standalone control source that wobbles a parameter
+continuously and automatically — the modular-synthesis piece of NLLC. Create
+one, then **patch** it into whatever you want it to affect:
+
+```
+/add_modulator type=lfo freq=2 name=lfo1
+/patch source=lfo1 dest=reverb.wet depth=0.2
+```
+
+`lfo1` is now continuously wobbling `reverb`'s `wet` mix at 2Hz, by up to
+±0.2 around whatever value it's already at (including any ramp you set on it
+separately — the modulator adds on top, it doesn't fight your other
+changes). `depth` controls how strongly it pushes that particular
+destination; patch the same modulator somewhere else at a different depth
+and it'll drive both at once:
+
+```
+/patch source=lfo1 dest=track_1.gain depth=0.1
+```
+
+Every patch gets a short id (`x1`, `x2`, ...), listed with `/patches`. Adjust
+a patch's depth later, or remove it, without touching the modulator itself:
+
+```
+/patch id=x1 depth=0.5 2
+/unpatch id=x1
+```
+
+A modulator's own params are rampable exactly like a processor's — `/lfo1
+freq=8 3` glides its rate from 2Hz to 8Hz over 3 seconds. See
+[commands.md](commands.md#modulators-and-patches) for the full reference, and
+[objects.md](objects.md#modulators) for available modulator types.
+
 ## The mixer
 
-Each channel strip in the mixer mirrors and controls the same state the console
-does: a vertical fader (gain, with a level meter next to it), a rotary pan dial
-(click-drag vertically), and the insert-chain buttons described above. Dragging
-these updates the audio graph directly — the console and mixer are just two views
-onto the same `NLLC` instance, so a `/track_1 gain=0.4` and dragging that track's
-fader do the same thing.
+The mixer is organized into sections, each with a title and a "none" placeholder
+when it's empty: **Tracks** (one strip per track, labeled with its own name —
+not a prettified guess — plus a separate strip for **master**), **Modulators**
+(one tile per modulator, e.g. `lfo1`, with a live meter showing its current
+bipolar output value and its params), and **Patches** (every active patch
+cable as a row, with its live depth and a remove button).
+
+Each track strip mirrors and controls the same state the console does: a
+vertical fader (gain, with a level meter next to it), a rotary pan dial
+(click-drag vertically), and the insert-chain buttons below that (click to
+toggle bypass, shown with strikethrough when off). Dragging these updates the
+audio graph directly — the console and mixer are just two views onto the same
+`NLLC` instance, so a `/track_1 gain=0.4` and dragging that track's fader do
+the same thing. A modulator tile and a patch row are read-only in the mixer
+today (control them from the console); their live values still update in
+real time as you type commands.
 
 Toggle the mixer pane with the collapse arrow between the console and mixer (it
 shrinks to a thin rail showing just the master power button, clock LED, and level
@@ -190,11 +236,16 @@ meter) — useful for maximizing the console when you're just typing.
 
 ```
 /track_1 remove_self
+/lfo1 remove_self
 /stop
 ```
 
-`remove_self` works on tracks and processors (not master). `/stop` suspends the
+`remove_self` works on tracks, processors, and modulators (not master) —
+removing a modulator or a track/processor also removes any patch that was
+touching it, so there's nothing left to separately clean up with `/unpatch`
+unless you're removing a specific patch on its own. `/stop` suspends the
 whole audio engine; `/start` resumes it.
 
 See [commands.md](commands.md) for the full command reference and
-[objects.md](objects.md) for every synth/processor type and its parameters.
+[objects.md](objects.md) for every synth/processor/modulator type and its
+parameters.

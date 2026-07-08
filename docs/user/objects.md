@@ -73,6 +73,26 @@ lines that feed back into *each other* (ping-pong) rather than themselves.
 | `wet` | `0.3` | `wet` | Wet-signal mix level (0–1). |
 | `stereoOffset` | `0.06`s | — | Extra delay time on the right channel for stereo width. Creation-only, not currently exposed as a runtime param. |
 
+## Modulators (`type=` on `/add_modulator`)
+
+A modulator is a standalone, continuously-running control source — created
+and addressed like a processor, but it never joins any channel's chain. On
+its own it does nothing audible; it only matters once patched into a
+parameter with `/patch` — see [commands.md](commands.md#modulators-and-patches).
+
+### `lfo` — `NLLCLFO` (default)
+
+> A low-frequency oscillator: a continuous bipolar (-1..1) control signal at
+> a given rate, for patching into any parameter.
+
+| Constructor option | Default | Runtime param | Meaning |
+|---|---|---|---|
+| `freq` | `1`Hz | `freq` | Oscillation rate. Rampable/deferrable like any param. |
+| `waveform` | `"sine"` | — | Any `OscillatorNode.type` value (`sine`, `square`, `sawtooth`, `triangle`). Creation-only. |
+
+`/add_modulator type=lfo freq=2 name=lfo1` then `/patch source=lfo1
+dest=reverb.wet depth=0.2` wobbles `reverb`'s wet mix at 2Hz.
+
 ## Events
 
 A synth's pattern is a list of events, authored with `/track_1 add_event ...`

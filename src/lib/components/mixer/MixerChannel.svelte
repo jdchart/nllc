@@ -59,7 +59,12 @@
 
         return () => {
             cancelAnimationFrame(rafId);
-            node.disconnect(analyser);
+            // Removing this track (nllc.removeTrack) already did a blanket
+            // disconnect() of gainNode, which silently takes this analyser
+            // tap down with it — so by the time this cleanup runs (next
+            // Svelte tick after the tracks array updates) the specific
+            // connection below may already be gone, which throws.
+            try { node.disconnect(analyser); } catch {}
         };
     });
 
@@ -106,17 +111,6 @@
 </script>
 
 <div class="channel">
-    <div class="inserts">
-        {#each processorList as proc (proc.id)}
-            <button
-                class="insert"
-                class:inactive={!proc.active}
-                title="{proc.id} — click to {proc.active ? 'bypass' : 'enable'}"
-                onclick={() => channel.setProcessorActive(proc.id, !proc.active)}
-            >{proc.name}</button>
-        {/each}
-    </div>
-
     <div class="meter-and-fader">
         <div class="meter">
             <div class="meter-fill" style="height: {meterHeight}%; background: {meterColor};"></div>
@@ -138,6 +132,17 @@
         <div class="pan-dial-indicator" style="transform: rotate({panAngle}deg)"></div>
     </div>
 
+    <div class="inserts">
+        {#each processorList as proc (proc.id)}
+            <button
+                class="insert"
+                class:inactive={!proc.active}
+                title="{proc.id} — click to {proc.active ? 'bypass' : 'enable'}"
+                onclick={() => channel.setProcessorActive(proc.id, !proc.active)}
+            >{proc.name}</button>
+        {/each}
+    </div>
+
     <div class="label">{label}</div>
 </div>
 
@@ -148,7 +153,10 @@
         align-items: center;
         width: 64px;
         gap: 0.5rem;
-        padding: 0.5rem 0;
+        padding: 0.5rem;
+        background: var(--nllc-bg);
+        border: 1px solid var(--nllc-border);
+        border-radius: 4px;
         flex-shrink: 0;
     }
 

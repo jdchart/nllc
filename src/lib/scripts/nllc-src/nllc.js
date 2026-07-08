@@ -5,14 +5,16 @@ import { NLLCReverb } from "./reverb";
 import { NLLCDelay } from "./delay";
 import { NLLCOscSynth } from "./oscsynth";
 import { NLLCSampler } from "./sampler";
+import { NLLCLFO } from "./lfo";
+import { NLLCPatch } from "./patch";
 import { createHarmonyContext } from "./harmony";
 
 // String-keyed registries that map a command/UI-facing type name to a class.
-// Adding a new synth or processor type means adding one entry here (plus the
-// import) — createSynth/createProcessor and the command router
-// (synth=/add_processor=) look types up dynamically, with no other code
-// needing to know new types exist. See docs/dev/creating-a-synth.md and
-// docs/dev/creating-a-processor.md.
+// Adding a new synth, processor, or modulator type means adding one entry
+// here (plus the import) — createSynth/createProcessor/createModulator and
+// the command router (synth=/add_processor=/add_modulator) look types up
+// dynamically, with no other code needing to know new types exist. See
+// docs/dev/creating-a-synth.md and docs/dev/creating-a-processor.md.
 const PROCESSOR_TYPES = {
     reverb: NLLCReverb,
     delay: NLLCDelay,
@@ -21,6 +23,10 @@ const PROCESSOR_TYPES = {
 const SYNTH_TYPES = {
     oscsynth: NLLCOscSynth,
     sampler: NLLCSampler,
+};
+
+const MODULATOR_TYPES = {
+    lfo: NLLCLFO,
 };
 
 // The top-level owner: one instance per page. Holds the AudioContext, the
@@ -43,6 +49,10 @@ export class NLLC {
         this.tracks = [];
         this.processors = [];
         this._processorIdCounter = 0;
+
+        this.modulators = [];
+        this.patches = [];
+        this._patchIdCounter = 0;
 
         // One shared context every synth resolves NLLCEvent.degree against
         // (see harmony.js) — mutate its fields in place (once a /harmony
@@ -154,6 +164,11 @@ export class NLLC {
         const index = this.tracks.indexOf(track);
         if (index === -1) return false;
 
+        // Must run before any disconnect() below — a patch's own disconnect()
+        // targets a specific node/param and throws if that connection was
+        // already severed by a blanket disconnect() first.
+        this._removePatchesReferencing(track);
+
         for (const processor of [...track.processors]) {
             this.removeProcessor(processor);
         }
@@ -176,11 +191,130 @@ export class NLLC {
         const index = this.processors.indexOf(processor);
         if (index === -1) return false;
 
+        this._removePatchesReferencing(processor);
         processor._channel?.removeProcessor(processor.id);
 
         this.processors.splice(index, 1);
         this.clock.removeUnit(processor);
 
         return true;
+    };
+
+    // Looks up `type` in MODULATOR_TYPES and constructs+registers a named
+    // modulator (unique within its own namespace, like tracks/processors).
+    // Modulators are registered with the clock so their own params can be
+    // ramped/pattern-automated the same way a processor's can, but — unlike
+    // a track's synth — never connect into any channel's chain; they exist
+    // only to be patched (see createPatch) into some other object's param.
+    createModulator(type, options = {}) {
+        const ModulatorClass = MODULATOR_TYPES[type];
+        if (!ModulatorClass) {
+            throw new Error(`unknown modulator type "${type}"`);
+        }
+
+        const name = this._uniqueName(options.name ?? type, this.modulators.map((m) => m.name));
+        const modulator = new ModulatorClass(this.audioContext, { ...options, name });
+
+        this.modulators.push(modulator);
+        this.clock.addUnit(modulator);
+
+        return modulator;
+    };
+
+    // Removes a modulator: tears down any patch that touches it (as either
+    // endpoint — a modulator can itself be patched into, e.g. one LFO's
+    // output driving another's freq) before disconnecting its own output.
+    removeModulator(modulator) {
+        const index = this.modulators.indexOf(modulator);
+        if (index === -1) return false;
+
+        this._removePatchesReferencing(modulator);
+        modulator.output.disconnect();
+
+        this.modulators.splice(index, 1);
+        this.clock.removeUnit(modulator);
+
+        return true;
+    };
+
+    // Resolves a bare name against every addressable object — the same
+    // namespace the console router searches when dispatching /name — for use
+    // as a patch endpoint. Order matches executeOne's dispatch order.
+    _resolveObject(name) {
+        if (name === "master") return this.master;
+        return this.tracks.find((t) => t.name === name)
+            ?? this.processors.find((p) => p.name === name)
+            ?? this.modulators.find((m) => m.name === name);
+    };
+
+    // Resolves a patch destination string "name.param" (e.g. "reverb.wet",
+    // "track_1.gain", "lfo1.freq") into the object that owns it and the raw
+    // AudioParam itself. Every patchable kind of object — a channel (track or
+    // master), a processor, or a modulator — exposes its params the same way
+    // (see param.js's NLLCParam), so there's exactly one lookup here rather
+    // than a special case per object kind.
+    _resolveDest(destName) {
+        const dotIndex = destName.indexOf(".");
+        if (dotIndex === -1) {
+            throw new Error(`invalid patch destination "${destName}" — expected "name.param", e.g. "reverb.wet"`);
+        }
+        const objectName = destName.slice(0, dotIndex);
+        const paramKey = destName.slice(dotIndex + 1);
+
+        const object = this._resolveObject(objectName);
+        if (!object) throw new Error(`unknown patch destination object "${objectName}"`);
+
+        const param = object.params?.[paramKey];
+        if (!param) throw new Error(`unknown param "${paramKey}" on "${objectName}"`);
+
+        return { object, param: param.audioParam };
+    };
+
+    // Creates one "patch cable": sourceName is any addressable object (a
+    // modulator, but also a track/master/processor, whose .output can double
+    // as a CV source); destName is "name.param" as resolved by _resolveDest.
+    // depth is the patch's own attenuator, independent of both endpoints.
+    createPatch({ sourceName, destName, depth = 1 }) {
+        const sourceObject = this._resolveObject(sourceName);
+        if (!sourceObject) throw new Error(`unknown patch source "${sourceName}"`);
+        if (!sourceObject.output) throw new Error(`"${sourceName}" has no output to patch from`);
+
+        const { object: destObject, param: destParam } = this._resolveDest(destName);
+
+        const patch = new NLLCPatch(this.audioContext, {
+            id: `x${++this._patchIdCounter}`,
+            sourceObject,
+            sourceName,
+            destObject,
+            destName,
+            destParam,
+            depth,
+        });
+
+        this.patches.push(patch);
+        return patch;
+    };
+
+    // Removes one patch (by reference). Returns false (no-op) if it isn't
+    // actually registered.
+    removePatch(patch) {
+        const index = this.patches.indexOf(patch);
+        if (index === -1) return false;
+
+        patch.disconnect();
+        this.patches.splice(index, 1);
+
+        return true;
+    };
+
+    // Disconnects/removes every patch touching `object` (as either endpoint)
+    // — called when the object itself is torn down, so a patch never
+    // outlives the thing it was connected to.
+    _removePatchesReferencing(object) {
+        for (const patch of [...this.patches]) {
+            if (patch.sourceObject === object || patch.destObject === object) {
+                this.removePatch(patch);
+            }
+        }
     };
 };

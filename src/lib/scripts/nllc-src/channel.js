@@ -1,3 +1,6 @@
+import { NLLCParam } from "./param";
+import { positionToGain, gainToPosition } from "./taper";
+
 // Base class for anything with a fader, pan, and an insert chain of
 // processors: the master bus and every NLLCTrack. Owns the actual Web Audio
 // nodes for that signal path and keeps them wired correctly as processors are
@@ -17,6 +20,16 @@ export class NLLCChannel {
         this.processors = [];
         this.automation = [];
 
+        // Console/UI-facing control surface (see commands.js's applyParams) —
+        // gain is a 0-1 position, exponentially tapered onto the actual
+        // (also 0-1) AudioParam value for perceptually-even steps; pan is
+        // linear -1..1 straight onto its AudioParam. Same shape every
+        // processor/modulator/patch uses for their own params.
+        this.params = {
+            gain: new NLLCParam(this.gainNode.gain, { decode: gainToPosition, encode: positionToGain, min: 0, max: 1 }),
+            pan: new NLLCParam(this.panner.pan, { min: -1, max: 1 }),
+        };
+
         this._rewireChain();
     };
 
@@ -26,6 +39,14 @@ export class NLLCChannel {
 
     get pan() {
         return this.panner.pan;
+    };
+
+    // Post-fader signal, exposed under the same name every other patchable
+    // object (NLLCSynth, NLLCProcessor, NLLCModulator) uses for its output —
+    // lets a track or master double as a patch source (see patch.js), e.g.
+    // sidechaining one track's level into another's gain.
+    get output() {
+        return this.gainNode;
     };
 
     addAutomation(event) {

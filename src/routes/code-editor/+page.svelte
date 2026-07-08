@@ -10,6 +10,8 @@
 
     let nllc_instance = $state(null);
     let tracks = $state([]);
+    let modulators = $state([]);
+    let patches = $state([]);
     let executeCommand = $state((text) => `unrecognized: "${text}" (engine not ready yet)`);
 
     let mixerVisible = $state(true);
@@ -80,24 +82,45 @@
         tracks = [...nllc.tracks];
         executeCommand = createCommandRouter(nllc);
 
-        // nllc.tracks is a plain (non-reactive) array mutated by /add_track and
-        // /track_1 remove_self; poll and diff so the mixer picks up the change,
-        // same pattern MixerChannel already uses for its processor list.
+        // nllc.tracks/modulators/patches are plain (non-reactive) arrays
+        // mutated by console commands (/add_track, /add_modulator, /patch,
+        // .../remove_self, /unpatch); poll and diff each so the mixer picks up
+        // additions/removals, same pattern MixerChannel already uses for its
+        // processor list.
         let trackNames = nllc.tracks.map((t) => t.name).join(",");
+        let modulatorNames = nllc.modulators.map((m) => m.name).join(",");
+        let patchIds = nllc.patches.map((p) => p.id).join(",");
         let rafId;
-        const pollTracks = () => {
+        const poll = () => {
             const names = nllc.tracks.map((t) => t.name).join(",");
             if (names !== trackNames) {
                 trackNames = names;
                 tracks = [...nllc.tracks];
             }
-            rafId = requestAnimationFrame(pollTracks);
+
+            const modNames = nllc.modulators.map((m) => m.name).join(",");
+            if (modNames !== modulatorNames) {
+                modulatorNames = modNames;
+                modulators = [...nllc.modulators];
+            }
+
+            const pIds = nllc.patches.map((p) => p.id).join(",");
+            if (pIds !== patchIds) {
+                patchIds = pIds;
+                patches = [...nllc.patches];
+            }
+
+            rafId = requestAnimationFrame(poll);
         };
-        pollTracks();
+        poll();
 
         return () => cancelAnimationFrame(rafId);
     });
 </script>
+
+<svelte:head>
+    <title>NLLC // Session</title>
+</svelte:head>
 
 <div class="layout">
     <div class="console-pane">
@@ -124,7 +147,7 @@
     <div class="mixer-pane" class:resizing style="width: {mixerVisible ? mixerWidth : 44}px">
         {#if nllc_instance}
             {#if mixerVisible}
-                <Mixer nllc={nllc_instance} {tracks} />
+                <Mixer nllc={nllc_instance} {tracks} {modulators} {patches} />
             {:else}
                 <CollapsedRail nllc={nllc_instance} />
             {/if}

@@ -21,6 +21,8 @@ export class NLLCClock {
 
         this.startTime = 0;
         this.scheduledUpTo = 0;
+
+        this._bpmRampTimer = null;
     };
 
     get secondsPerBeat() {
@@ -49,12 +51,19 @@ export class NLLCClock {
     stop() {
         this.running = false;
         clearTimeout(this.timerId);
+        this._cancelBpmRamp();
     };
 
     // Changes tempo without a glitch: if the clock is already running, shifts
     // startTime so the current playback beat is unchanged at the moment of the
-    // switch (only the rate of beats going forward changes).
+    // switch (only the rate of beats going forward changes). Cancels any
+    // in-flight rampBpm so a plain instant set always wins over a stale ramp.
     setBpm(bpm) {
+        this._cancelBpmRamp();
+        this._applyBpm(bpm);
+    };
+
+    _applyBpm(bpm) {
         if (this.running) {
             const now = this.audioContext.currentTime;
             const currentBeat = (now - this.startTime) / this.secondsPerBeat;
@@ -62,6 +71,46 @@ export class NLLCClock {
             this.startTime = now - currentBeat * this.secondsPerBeat;
         } else {
             this.bpm = bpm;
+        }
+    };
+
+    // Glides bpm from its current value to targetBpm over durationSeconds.
+    // bpm isn't a native AudioParam (it's a plain number the clock uses for
+    // its own beat<->time math), so unlike gain/pan/wet this can't ride
+    // linearRampToValueAtTime — instead this steps _applyBpm repeatedly on a
+    // short timer, each step re-deriving startTime the same glitch-free way
+    // setBpm always has. `startTime` (an AudioContext timestamp) defers the
+    // ramp's start, e.g. for /clock bpm=140 8 at=cycle.
+    rampBpm(targetBpm, durationSeconds, { startTime } = {}) {
+        this._cancelBpmRamp();
+        const beginTime = startTime ?? this.audioContext.currentTime;
+        const startBpm = this.bpm;
+        const stepMs = 15;
+
+        const tick = () => {
+            const now = this.audioContext.currentTime;
+            if (now < beginTime) {
+                this._bpmRampTimer = setTimeout(tick, stepMs);
+                return;
+            }
+
+            const elapsed = now - beginTime;
+            if (elapsed >= durationSeconds) {
+                this._applyBpm(targetBpm);
+                this._bpmRampTimer = null;
+                return;
+            }
+
+            this._applyBpm(startBpm + (targetBpm - startBpm) * (elapsed / durationSeconds));
+            this._bpmRampTimer = setTimeout(tick, stepMs);
+        };
+        this._bpmRampTimer = setTimeout(tick, 0);
+    };
+
+    _cancelBpmRamp() {
+        if (this._bpmRampTimer) {
+            clearTimeout(this._bpmRampTimer);
+            this._bpmRampTimer = null;
         }
     };
 
@@ -103,11 +152,20 @@ export class NLLCClock {
     // Runs once per lookaheadMs: schedules anything due in the next
     // scheduleAheadTime seconds, then reschedules itself. Using setTimeout
     // (rather than requestAnimationFrame) keeps ticking in a backgrounded tab.
+    // _scheduleRange is wrapped so a single bad event/param (e.g. a NaN that
+    // throws inside a native AudioParam call) can only drop that one
+    // scheduling pass rather than killing the reschedule below forever —
+    // the whole engine going silent from one bad command is worse than
+    // dropping the offending event.
     _tick() {
         const now = this.audioContext.currentTime;
         const horizonBeat = (now + this.scheduleAheadTime - this.startTime) / this.secondsPerBeat;
 
-        this._scheduleRange(this.scheduledUpTo, horizonBeat);
+        try {
+            this._scheduleRange(this.scheduledUpTo, horizonBeat);
+        } catch (error) {
+            console.error("NLLCClock: error scheduling range, skipping", error);
+        }
         this.scheduledUpTo = horizonBeat;
 
         this.timerId = setTimeout(() => this._tick(), this.lookaheadMs);

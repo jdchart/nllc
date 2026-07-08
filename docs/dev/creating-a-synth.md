@@ -112,8 +112,9 @@ treats it as a slot index and never resolves `degree`).
 settable via constructor options, reachable through `/add_track synth=oscsynth
 waveform=square` (not through `/track_1 synth=...`, which only forwards the type —
 see [user/commands.md](../user/commands.md)). If you want a synth parameter
-adjustable at runtime the same way `NLLCReverb`'s `wet` is, follow the processor
-pattern in [creating-a-processor.md](creating-a-processor.md#exposing-params) and
-populate `this.params` the same way; `channelCommand` in `commands.js` would need
-a small addition to actually read `channel.source.params` the way
-`processorCommand` reads `processor.params` — it doesn't today.
+adjustable at runtime the same way `NLLCReverb`'s `wet` is, populate
+`this.params` with `NLLCParam`s the same way a processor does (see
+[creating-a-processor.md](creating-a-processor.md) and `param.js`) —
+`channelCommand` in `commands.js` would need a small addition to actually
+apply `channel.source.params` through `applyParams()` the way
+`paramObjectCommand` does for processors/modulators — it doesn't today.

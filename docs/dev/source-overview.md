@@ -8,8 +8,41 @@ bottom-up (dependencies first).
 Pure math, no classes. `positionToGain(position)` / `gainToPosition(gain)`: an
 exponential taper (`TAPER_K = 6`) between a linear 0–1 control position (fader,
 `gain=` command param) and the actual 0–1 gain value, so equal position steps read
-as equal loudness steps. Used by the command router (`channelCommand`) and by
-`MixerChannel.svelte`'s fader — both need to convert in both directions.
+as equal loudness steps. Used by `NLLCChannel`'s `gain` param (see `param.js`
+below) and by `MixerChannel.svelte`'s fader — both need to convert in both
+directions.
+
+## `param.js`
+
+`NLLCParam` — the one class every rampable/patchable parameter is built from,
+on every kind of object that has one: a channel's `gain`/`pan`, a processor's
+own params, a modulator's own params, a patch's `depth`. Wraps a single raw
+`AudioParam` plus:
+
+- optional `decode`/`encode` — a value transform between the user-facing
+  number and the actual `AudioParam` value (used by channel `gain`, whose
+  user-facing 0–1 position is exponentially tapered via `taper.js` onto the
+  underlying gain value; everything else defaults to identity).
+- optional `min`/`max` — clamped by `.clamp(value)` (channel gain/pan use
+  this; processor/modulator params default to unclamped).
+- optional `onSet` — overrides the instant-set path for a param that has to
+  fan a single value out across more than one node (`NLLCDelay`'s `time`
+  writes both `delayL.delayTime` and `delayR.delayTime`, the latter offset for
+  stereo width). Ramping/deferred `at=` scheduling still only animates the
+  "primary" `.audioParam` directly — `onSet` only affects the plain
+  instant-set case.
+
+`.get()`/`.set(value)`/`.clamp(value)` are the whole public surface;
+`.audioParam` is public too, and is what `commands.js`'s `applyParams` reaches
+into directly for ramping/deferred scheduling. Before this class existed, a
+param's `.params` entry (a hand-written `{get,set}` closure) and its
+same-named raw-`AudioParam` getter (e.g. a processor's `get wet()`) were two
+independent things that had to be kept in sync by convention — `NLLCParam` is
+the single source of truth for both, so there's nothing left that can drift
+apart. A class that still exposes a getter like `get wet()` today (for use as
+an `NLLCAutomationEvent` target, e.g. `reverb.wet` in a pattern-automation
+call) does so as a thin delegate onto `this.params.wet.audioParam`, not a
+second implementation.
 
 ## `event.js`
 
@@ -38,38 +71,62 @@ and threads it into every synth (see [architecture.md](architecture.md#harmony-c
 
 `NLLCAutomationEvent({ beat, duration, target, from, to, curve, once })` — a
 parameter ramp. `target` is a real `AudioParam` (e.g. `track.volume`,
-`reverb.wet`). A private `applyRamp(param, time, endTime, from, to, curve)` is
-the one place that turns a curve name into actual Web Audio ramp calls
-(`linearRampToValueAtTime` / `exponentialRampToValueAtTime` / `setTargetAtTime`
-for `curve: "target"`, an exponential approach useful for smoother/asymptotic
-moves). Two exported functions call into it:
-`scheduleAutomationEvent(time, event, secondsPerBeat)`, called directly by
-`NLLCClock` for loop-position pattern automation, and
+`reverb.wet`, or any `NLLCParam`'s own `.audioParam`). A private `applyRamp(param,
+time, endTime, from, to, curve)` is the one place that turns a curve name into
+actual Web Audio ramp calls (`linearRampToValueAtTime` /
+`exponentialRampToValueAtTime` / `setTargetAtTime` for `curve: "target"`, an
+exponential approach useful for smoother/asymptotic moves). Two exported
+functions call into it: `scheduleAutomationEvent(time, event, secondsPerBeat)`,
+called directly by `NLLCClock` for loop-position pattern automation, and
 `scheduleRamp(audioContext, param, from, to, durationSeconds, { startTime,
-curve })`, called directly by the command router for one-off console ramps
-(`/track_1 gain=0 3`) — anchored to an absolute time (`audioContext.currentTime`
-by default) rather than a loop-relative beat, and never registered with the
-clock. See [architecture.md](architecture.md#two-ramp-scheduling-paths-one-curve-implementation).
+curve })`, called directly by the command router (via `commands.js`'s
+`applyParams`) for one-off console ramps (`/track_1 gain=0 3`) — anchored to
+an absolute time (`audioContext.currentTime` by default) rather than a
+loop-relative beat, and never registered with the clock. See
+[architecture.md](architecture.md#two-ramp-scheduling-paths-one-curve-implementation).
 
 ## `clock.js` — `NLLCClock`
 
 The scheduler. See [architecture.md](architecture.md#the-clock-is-a-lookahead-scheduler-over-units)
 for the full model. Key surface: `addUnit`/`removeUnit`, `start`/`stop`,
-`setBpm(bpm)` (glitch-free — preserves the current playback beat across a tempo
-change while running), `setLoopLengthBeats(beats)` (changes the loop length;
-no rebasing needed since `_scheduleRange` reads it fresh every tick), both
-exposed via `/clock bpm= num_beats=`. `beatToTime(beat)` converts a beat
-position to an absolute `AudioContext` timestamp; `currentBeat()`,
+`setBpm(bpm)` (glitch-free — preserves the current playback beat across a
+tempo change while running; also cancels any in-flight `rampBpm`),
+`rampBpm(targetBpm, durationSeconds, { startTime })` (glides tempo over time —
+bpm isn't a native `AudioParam`, so unlike a channel/processor param this
+can't ride `linearRampToValueAtTime`; it steps `_applyBpm` repeatedly on a
+short `setTimeout`, each step re-deriving `startTime` the same glitch-free way
+`setBpm` always has), and `setLoopLengthBeats(beats)` (changes the loop
+length; no rebasing needed since `_scheduleRange` reads it fresh every tick;
+deliberately has no ramp equivalent — a fractional, constantly-shifting loop
+length has no sensible meaning). All exposed via `/clock bpm= num_beats=`
+(see [user/commands.md](../user/commands.md)). `beatToTime(beat)` converts a
+beat position to an absolute `AudioContext` timestamp; `currentBeat()`,
 `nextBeatTime()`, and `nextCycleTime()` compute the live playback position and
-the next beat/loop-boundary timestamps — the anchor points `scheduleRamp`'s
-`startTime` uses for `at=beat`/`at=cycle`.
+the next beat/loop-boundary timestamps — the anchor points a ramp's or a
+deferred instant set's `startTime` uses for `at=beat`/`at=cycle`.
+
+`_tick()` wraps its call to `_scheduleRange` in a try/catch: a single bad
+event or param (e.g. a value that ends up passing a non-finite number into a
+native `AudioParam` call, which throws) can only drop that one scheduling
+pass — the `setTimeout` reschedule immediately after is unconditional, so one
+bad command can never permanently kill the whole engine's scheduling loop.
+This pairs with `commands.js`'s `toNumber()` guard (see below), which is the
+first line of defense — reject bad input before it ever reaches an
+`AudioParam` call — with the tick-level try/catch as a second, structural
+line of defense for anything that gets through anyway.
 
 ## `channel.js` — `NLLCChannel`
 
 Base class for anything with a fader, pan, and an insert chain: `master` and every
 `NLLCTrack` are one of these. Owns `input`/`panner`/`gainNode` nodes and the
-`processors` array; `volume`/`pan` getters expose the underlying `AudioParam`s
-directly (so they can be automation targets or bound straight into the UI).
+`processors` array. `volume`/`pan` getters expose the underlying `AudioParam`s
+directly (so they can be automation targets or bound straight into the UI);
+`output` (aliasing `gainNode`, the post-fader signal) lets a channel double as
+a patch source (see `patch.js`) the same way a synth's or processor's own
+`output` can. `params` (`{ gain: NLLCParam, pan: NLLCParam }`, see `param.js`)
+is the console/UI-facing surface `commands.js`'s `applyParams` uses — `gain`
+wraps `gainNode.gain` through the position↔gain taper (`taper.js`), `pan`
+wraps `panner.pan` directly, both clamped (`0..1` / `-1..1`).
 `addProcessor`/`removeProcessor`/`setProcessorActive` all end by calling
 `_rewireChain()`, which is the only place that actually connects/disconnects
 nodes — everything else just mutates the `processors` array and lets rewiring
@@ -112,18 +169,20 @@ harmony). Starts with an empty `events` array, same as `NLLCOscSynth`.
 
 Mirrors `NLLCSynth`: `name`, `input`/`output` (both `GainNode`s — subclasses wire
 their own DSP between them), `active` (routing bypass, read by
-`Channel._rewireChain`), `params` (`{ paramName: { get(), set(value) } }` —
-this *is* meant to be filled in by subclasses; it's the introspection surface the
-command router uses for `/reverb wet=0.5` and `/reverb help`), `automation`.
+`Channel._rewireChain`), `params` (`{ paramName: NLLCParam }` — see `param.js`
+— this *is* meant to be filled in by subclasses; it's the introspection
+surface the command router uses for `/reverb wet=0.5` and `/reverb help`),
+`automation`.
 
 ## `reverb.js` — `NLLCReverb extends NLLCProcessor`
 
 Convolution reverb against a synthetically-generated impulse response
 (`buildImpulseResponse`: exponentially-decaying random noise per channel — no
 external IR file). Parallel wet/dry: `input` connects straight to `output` (dry)
-*and* to the convolver chain (wet, via `wetGain`). Exposes `wet` both as a
-`params.wet` entry and as a getter returning the raw `AudioParam` (for use as an
-automation `target`).
+*and* to the convolver chain (wet, via `wetGain`). `params.wet` is an
+`NLLCParam` wrapping `wetGain.gain`; `get wet()` is a thin alias onto
+`params.wet.audioParam` (kept for use as an `NLLCAutomationEvent` target, e.g.
+the demo bootstrap's fade-in).
 
 ## `delay.js` — `NLLCDelay extends NLLCProcessor`
 
@@ -131,8 +190,48 @@ Stereo ping-pong delay: a `ChannelSplitter`/`ChannelMerger` pair around two
 independent `DelayNode`s, cross-feeding each channel's output into the *other*
 channel's delay line (`delayL → feedbackL → delayR`, and vice versa) rather than
 back into itself, plus a small `stereoOffset` added to the right channel's delay
-time for width. `time`/`feedback`/`wet` are all exposed as both `params` entries
-and raw-`AudioParam` getters, same pattern as `NLLCReverb`.
+time for width. `time`/`feedback` are `NLLCParam`s whose `onSet` fans an
+instant set out across both L/R nodes (`time` also adds `stereoOffset` to the
+R side) — ramping/deferred `at=` scheduling still only animates the L side
+directly, a pre-existing limitation unchanged by the `NLLCParam` consolidation.
+`wet` is a plain single-node `NLLCParam`. Same `get time()`/`get feedback()`/
+`get wet()` alias pattern as `NLLCReverb`.
+
+## `modulator.js` — `NLLCModulator` (base)
+
+Base class for every modulation source (see `lfo.js`). Structurally a
+processor's sibling — it's named/addressable and has `params` the exact same
+way — but it never sits in a channel's insert chain; it exists purely to be
+patched (see `patch.js`) into some other object's parameter. `output` is a
+plain `GainNode`; by convention a modulator's raw output is bipolar
+(roughly `-1..1`), since a *patch*'s own `depth` (not the modulator) decides
+how hard that signal pushes any given destination — the same modulator can
+drive several destinations at different depths.
+
+## `lfo.js` — `NLLCLFO extends NLLCModulator`
+
+A continuously-running `OscillatorNode` (started once in the constructor,
+never stopped) connected straight into `this.output` — a bipolar control
+signal at `freq` Hz. `params.freq` is an `NLLCParam` wrapping
+`osc.frequency`; `get freq()` is the same kind of thin alias as a processor's
+`get wet()`.
+
+## `patch.js` — `NLLCPatch`
+
+One "patch cable": connects a source object's `.output` (a modulator, but
+also a track/master's post-fader signal or a processor's post-effect signal —
+anything with an `.output`) into a destination `AudioParam`, through its own
+`depthGain` (attenuator) node — `sourceObject.output → depthGain →
+destParam`. `depth` lives on the patch, not either endpoint, specifically so
+the same source can drive several destinations at different amounts, and
+`params.depth` (an `NLLCParam` wrapping `depthGain.gain`) makes it rampable
+the exact same way a processor param is. Stores `sourceObject`/`destObject`
+(plus display-only `sourceName`/`destName` strings) so `NLLC` can
+cascade-remove a patch when either endpoint is itself torn down (see
+`nllc.js`). `disconnect()` tears down both Web Audio connections; it must run
+*before* the endpoint's own blanket `.disconnect()` in `removeTrack`/
+`removeProcessor`/`removeModulator`, since a specific-argument `.disconnect(node)`
+throws if that connection was already severed by a bare `.disconnect()`.
 
 ## `commands.js`
 
@@ -141,35 +240,73 @@ No classes — a closure-based router. `parseCommand(text)` is the tokenizer
 optional trailing duration token that turns a value into a ramp spec
 `{ value, duration, unit }` — see [user/commands.md](../user/commands.md#syntax));
 `isRamp()`/`rampSeconds()`/`resolveStartTime()` are the small shared helpers
-`channelCommand` and `processorCommand` both use to turn a ramp spec into a
-`scheduleRamp()` call, including resolving `at=beat`/`at=cycle` against the
-clock. `channelCommand`/`processorCommand` are the two shapes of object the
-router knows how to talk to; `createCommandRouter(nllc)` ties it together into
+every ramp-aware command uses to turn a ramp spec into a `scheduleRamp()`
+call, including resolving `at=beat`/`at=cycle` against the clock.
+`toNumber(raw, label)` converts a parsed value to a number, *throwing* (not
+returning `NaN`) if it isn't finite — this is what turns a bad numeric param
+into a clean caught error instead of silently writing `NaN` into persistent
+engine state (e.g. `clock.bpm`). `setInstant(audioContext, param, value,
+startTime)` writes a value onto an `AudioParam` via
+`cancelScheduledValues`+`setValueAtTime` rather than a direct `.value =`
+assignment, so a deferred (`at=`) *instant* set is possible, not just a
+deferred ramp.
+
+`applyParams(nllc, paramsMap, input, { startTime, label }, { reportUnknown })`
+is the one function that knows how to get/set/ramp/defer any `NLLCParam` (see
+`param.js`) against a parsed command value — shared by `channelCommand`
+(gain/pan), `paramObjectCommand` (every processor/modulator param), and the
+`/patch` command (depth), replacing what used to be three separate hand-rolled
+copies of the same ramp/instant/`at=` branching.
+
+`channelCommand` and `paramObjectCommand` are the two shapes of object the
+router knows how to talk to: `channelCommand` handles a track or master
+(gain/pan via `applyParams`, plus channel-specific params like `add_event`/
+`synth=`/`add_processor=`); `paramObjectCommand` is shared by
+`processorCommand` and `modulatorCommand` (both are just "addressed by name,
+expose `.params`" — the only difference is which `nllc.remove*` function gets
+called for `remove_self`). `createCommandRouter(nllc)` ties it together into
 `executeCommand`, which first splits one submitted line into multiple `/name
 ...` segments (`splitCommands`, letting `/track_1 gain=0 8 /reverb wet=0.9 6b`
-run both together) before dispatching each. See [adding-commands.md](adding-commands.md).
+run both together) before dispatching each — in order, against top-level
+`commands`, `master`, `nllc.tracks`, `nllc.processors`, then `nllc.modulators`.
+See [adding-commands.md](adding-commands.md).
 
 ## `nllc.js` — `NLLC`
 
 The top-level object and factory/registry hub:
 
-- `SYNTH_TYPES` / `PROCESSOR_TYPES` — the string-to-class registries that
-  `synth=`/`add_processor=` command params (and `createSynth`/`createProcessor`)
-  look up against. **Adding a new synth or processor class means adding one line
+- `SYNTH_TYPES` / `PROCESSOR_TYPES` / `MODULATOR_TYPES` — the string-to-class
+  registries that `synth=`/`add_processor=`/`add_modulator` command params
+  (and `createSynth`/`createProcessor`/`createModulator`) look up against.
+  **Adding a new synth, processor, or modulator class means adding one line
   here** (plus the import) — nothing else in the engine needs to know about it.
-- `createTrack`/`createSynth`/`createProcessor` — construct + register (with the
-  clock, and with `tracks`/`processors` for name-based lookup) in one call.
-  `createSynth` also threads `this.harmony` (one shared context constructed
-  once in the `NLLC` constructor, see [harmony.js](#harmonyjs)) into every
-  synth it builds.
+- `createTrack`/`createSynth`/`createProcessor`/`createModulator` — construct +
+  register (with the clock, and with `tracks`/`processors`/`modulators` for
+  name-based lookup) in one call. `createSynth` also threads `this.harmony`
+  (one shared context constructed once in the `NLLC` constructor, see
+  [harmony.js](#harmonyjs)) into every synth it builds.
 - `setTrackSynth` — swap a track's synth at runtime (used by `/track_1
   synth=sampler`), correctly deregistering the old synth from the clock and
   registering the new one.
-- `removeTrack`/`removeProcessor` — the inverse; also handles tearing down a
-  track's own processor inserts and disconnecting Web Audio nodes so they can be
-  garbage collected.
+- `removeTrack`/`removeProcessor`/`removeModulator` — the inverse of the
+  `create*` methods above; each first calls `_removePatchesReferencing(object)`
+  (see below) *before* disconnecting any of its own nodes, then handles its
+  own teardown (`removeTrack` also tears down the track's own processor
+  inserts).
+- `createPatch({ sourceName, destName, depth })` / `removePatch(patch)` — the
+  modular-patching layer. `_resolveObject(name)` resolves a bare name against
+  every addressable object (master, then tracks, processors, modulators — the
+  same order `executeOne`'s dispatch uses); `_resolveDest("name.param")`
+  splits on the dot and looks up `object.params[paramKey].audioParam` — one
+  lookup for every kind of object, since channels/processors/modulators all
+  expose `params` as `{ key: NLLCParam }` uniformly (see `param.js`).
+  `_removePatchesReferencing(object)` cascade-removes any patch whose
+  `sourceObject` or `destObject` is the object being torn down, so a patch
+  never outlives either endpoint.
 - `_uniqueName(base, existingNames)` — de-duplicates names as `base`, `base_2`,
-  `base_3`, ... (used for both tracks and processors, independently).
+  `base_3`, ... (used independently for tracks, processors, and modulators —
+  each its own namespace, so it's possible, if unlikely, for two different
+  kinds of object to end up with the same addressable name).
 
 ## `ollama.js` — `Ollama`
 

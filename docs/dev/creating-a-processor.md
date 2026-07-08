@@ -2,16 +2,17 @@
 
 A processor is anything that extends `NLLCProcessor`, wires real DSP nodes between
 the inherited `this.input` and `this.output` (both plain `GainNode`s), and
-populates `this.params` so the console can inspect/control it.
+populates `this.params` with `NLLCParam`s so the console can inspect/control it.
 
 ## Minimal example
 
 A simple hard-clip distortion using a `WaveShaperNode`, with one runtime param
-(`amount`):
+(`wet`):
 
 ```js
 // src/lib/scripts/nllc-src/distortion.js
 import { NLLCProcessor } from "./processor";
+import { NLLCParam } from "./param";
 
 function buildCurve(amount) {
     const samples = 1024;
@@ -31,7 +32,6 @@ export class NLLCDistortion extends NLLCProcessor {
 
         this.shaper = audioContext.createWaveShaper();
         this.shaper.curve = buildCurve(amount);
-        this._amount = amount;
 
         this.wetGain = audioContext.createGain();
         this.wetGain.gain.value = wet;
@@ -41,25 +41,15 @@ export class NLLCDistortion extends NLLCProcessor {
         this.wetGain.connect(this.output);
 
         this.params = {
-            amount: {
-                get: () => this._amount,
-                set: (value) => {
-                    this._amount = value;
-                    this.shaper.curve = buildCurve(value);
-                },
-            },
-            wet: {
-                get: () => this.wetGain.gain.value,
-                set: (value) => { this.wetGain.gain.value = value; },
-            },
+            wet: new NLLCParam(this.wetGain.gain),
         };
-    };
-
-    get wet() {
-        return this.wetGain.gain;
     };
 };
 ```
+
+(`amount` is deliberately left as a constructor-only option here, not a
+runtime param — see the note below on params that aren't backed by a real
+`AudioParam` at all.)
 
 Points worth noting, all copied from `reverb.js`/`delay.js`:
 
@@ -70,30 +60,44 @@ Points worth noting, all copied from `reverb.js`/`delay.js`:
   in parallel with the wet path, so `wet=0` doesn't silence the channel — match
   this convention unless a processor is deliberately not supposed to have a dry
   path (e.g. a pure gain/distortion insert might reasonably *not* keep a separate
-  dry path, as in the example above, since the wet path *is* the whole signal).
+  dry path, since the wet path *is* the whole signal).
 - **`this.params` is the command-router's introspection surface** —
-  `{ paramName: { get(), set(value) } }`. `processorCommand` in `commands.js`
-  calls `.set(Number(value))` for `/name param=value` and `.get()` to print current
-  values for `/name` / `/name help`. Every param you want addressable from the
-  console (or eventually the mixer) must appear here.
-- **Expose automation-worthy params as raw `AudioParam` getters too** (like the
-  `get wet()` above, or `NLLCDelay`'s `time`/`feedback`/`wet`) if you want the
-  param usable as an `NLLCAutomationEvent` `target` — automation ramps call real
-  `AudioParam` methods (`linearRampToValueAtTime` etc.), which plain
-  JS-object params (like `amount` above, backed by a curve rebuild rather than an
-  `AudioParam`) can't support. A param can be *just* a `params` entry (console/UI
-  control only, like `amount`), *just* an `AudioParam` getter (rare), or both
-  (like `wet` above) — pick based on whether it needs to be automatable.
+  `{ paramName: NLLCParam }` (see `param.js`). `commands.js`'s `applyParams()`
+  calls `.set(value)`/reads `.audioParam` for `/name param=value` (and ramps/
+  defers the same way), and `.get()` to print current values for `/name` /
+  `/name help`. Every param you want addressable from the console (or
+  eventually the mixer) must appear here.
+- **Most params wrap exactly one real `AudioParam`** — `new NLLCParam(this.wetGain.gain)`
+  is the common case (see `wet` above, or `NLLCReverb.params.wet`). This is
+  what makes ramping/`at=` deferral work automatically, since both read/write
+  `.audioParam` directly via native `setValueAtTime`/`linearRampToValueAtTime`
+  calls.
+- **A param that has to fan a value out across more than one node** (like
+  `NLLCDelay`'s `time`, which writes both `delayL.delayTime` and
+  `delayR.delayTime`, the latter offset for stereo width) still fits
+  `NLLCParam` — pass whichever node should be the "primary" one (the one
+  ramping/`at=` deferral will animate) as the wrapped `AudioParam`, and
+  override the plain instant-set path with `onSet`. See `delay.js` for the
+  real example.
+- **A param that isn't backed by a real `AudioParam` at all** (`amount`
+  above, whose "value" is really a `Float32Array` curve that has to be
+  rebuilt from scratch on every change) doesn't fit `NLLCParam` well — there's
+  no real `AudioParam` to ramp, and forcing one in just to satisfy the
+  constructor would be misleading. It's fine to leave a param like this as a
+  constructor-only option (not runtime-adjustable at all) until/unless
+  `NLLCParam` grows a mode for non-`AudioParam`-backed values; don't invent an
+  awkward fake `AudioParam` to route around this.
 - **`active` (routing bypass) is handled entirely by `NLLCChannel._rewireChain`** —
   you don't need to check `this.active` yourself inside the processor; when
   bypassed, the channel simply doesn't connect your `input`/`output` into the
   chain at all.
-- **Any raw-`AudioParam` getter automatically gets console ramp support for
-  free.** `processorCommand` (`commands.js`) is generic over `params` for both
-  instant sets and ramps (`/myprocessor amount=0.8 3`, `at=beat`/`at=cycle`) —
-  it reaches the `AudioParam` via `processor[key]` (your getter), not through
-  `params[key].get()/.set()`. No extra code needed beyond exposing the getter,
-  same as for `NLLCAutomationEvent` targets above.
+- **If you also want a param usable as an `NLLCAutomationEvent` target**
+  (loop-position pattern automation, not a console ramp), expose a getter
+  that delegates to your `NLLCParam`'s own `audioParam` — e.g. `get wet() {
+  return this.params.wet.audioParam; }`, exactly like `NLLCReverb`/`NLLCDelay`
+  do. This is a thin alias, not a second implementation, so it can never
+  drift out of sync with `params.wet` the way two independently-hand-written
+  accessors could.
 
 ## Registering it
 
@@ -109,5 +113,5 @@ const PROCESSOR_TYPES = {
 ```
 
 `/track_1 add_processor=distortion` and `/distortion amount=0.8` work immediately —
-no other code changes needed, since `createProcessor` and `processorCommand` both
-work generically off `PROCESSOR_TYPES` and `params`.
+no other code changes needed, since `createProcessor` and `processorCommand`/
+`applyParams` both work generically off `PROCESSOR_TYPES` and `params`.

@@ -1,4 +1,5 @@
 import { NLLCProcessor } from "./processor";
+import { NLLCParam } from "./param";
 
 // Generates a synthetic impulse response: exponentially-decaying white noise
 // per channel (not a recorded space). `decay` is the exponent of the falloff
@@ -37,18 +38,16 @@ export class NLLCReverb extends NLLCProcessor {
         this.convolver.connect(this.wetGain);
         this.wetGain.connect(this.output);
 
-        // Console/UI-facing control surface (see commands.js's processorCommand).
+        // Console/UI-facing control surface (see commands.js's applyParams).
         this.params = {
-            wet: {
-                get: () => this.wetGain.gain.value,
-                set: (value) => { this.wetGain.gain.value = value; },
-            },
+            wet: new NLLCParam(this.wetGain.gain),
         };
     };
 
-    // Raw AudioParam accessor, so `wet` can also be used as an
-    // NLLCAutomationEvent target (ramped over time), not just set instantly.
+    // Thin alias onto params.wet's own AudioParam (not a second
+    // implementation) so `wet` can also be used directly as an
+    // NLLCAutomationEvent target, e.g. reverb.wet in a pattern-automation call.
     get wet() {
-        return this.wetGain.gain;
+        return this.params.wet.audioParam;
     };
 };
