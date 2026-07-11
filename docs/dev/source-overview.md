@@ -290,13 +290,52 @@ is shared by `processorCommand` and `modulatorCommand` (both are just
 "addressed by name, expose `.params`" — the only difference is which
 `nllc.remove*` function gets called for `remove_self`). `channelCommand`'s
 `remove_self` branch checks `nllc.buses.includes(channel)` to call
-`removeBus` instead of `removeTrack` for a bus. `createCommandRouter(nllc)`
-ties it together into `executeCommand`, which first splits one submitted line
-into multiple `/name ...` segments (`splitCommands`, letting `/track_1 gain=0
+`removeBus` instead of `removeTrack` for a bus.
+
+Both dispatch to one of three outcomes: `channelSummary`/`paramObjectSummary`
+(no params — condensed one-liner), `channelHelp`/`paramObjectHelp` (`help` —
+every param's value+range via the shared `formatParamLine`, plus every
+command that object kind accepts, spelled out with a usage note), or actually
+applying whatever param/command was given. The help builders read
+`nllc.synthTypes`/`processorTypes`/`modulatorTypes` (see `nllc.js` below) to
+list available `synth=`/`add_processor=`/`add_modulator` types without
+hardcoding them.
+
+`createCommandRouter(nllc)`
+returns `{ executeCommand, suggest }` — `executeCommand` ties the above into
+one function, first splitting one submitted line into multiple `/name ...`
+segments (`splitCommands`, letting `/track_1 gain=0
 8 /reverb wet=0.9 6b` run both together) before dispatching each — in order,
 against top-level `commands`, `master`, `nllc.tracks`, `nllc.buses`,
 `nllc.processors`, then `nllc.modulators`. See
 [adding-commands.md](adding-commands.md).
+
+`suggest(input, cursorPos)` is the console's ghost-text completion (consumed
+by `CodeEditor.svelte` — see [architecture.md](architecture.md#console-suggestions-ghost-text-completion)),
+returned alongside `executeCommand` (rather than attached to it as a
+property) specifically so it can close over the same `commands` object —
+`Object.keys(commands)` is the one list of top-level command names, read once
+into `topLevelNames` right after `commands` is built, so a new top-level
+command becomes suggestible for free with no second list to maintain.
+`suggestCompletion(nllc, topLevelNames, input, cursorPos)` (module-level, not
+part of the closure) does the actual work: only completes when the cursor
+sits at the very end of the input (mid-line completion isn't supported —
+see `CodeEditor.svelte`'s overlay technique for why), and only two token
+positions — the `/name` itself (`addressableNames`: every track/bus/
+processor/modulator/`master`, *then* top-level commands, deliberately in that
+order rather than `executeOne`'s dispatch order, so typing `/trac` suggests
+an actual track like `track_1` instead of the built-in `/tracks`), or, once
+past the name, a bare param *key* for whatever channel/processor/modulator it
+resolves to (`resolveKeywordsFor` → `channelKeywordsFor`/
+`paramObjectKeywordsFor`, each object's own `params` keys plus one of two
+small hand-maintained keyword lists, `CHANNEL_ACTION_KEYWORDS`/
+`PARAM_OBJECT_ACTION_KEYWORDS`, for the non-param commands like
+`add_event`/`remove_self`/`help`). A token already containing `=` is
+mid-value and isn't completed (value suggestions aren't built yet).
+`pickBestMatch` returns the first candidate that extends the typed prefix —
+no ranking or cycling among several matches yet (see
+[adding-commands.md](adding-commands.md#keeping-suggestions-in-sync) for what
+to update when adding a new channel/processor/modulator command).
 
 ## `nllc.js` — `NLLC`
 
@@ -307,6 +346,10 @@ The top-level object and factory/registry hub:
   (and `createSynth`/`createProcessor`/`createModulator`) look up against.
   **Adding a new synth, processor, or modulator class means adding one line
   here** (plus the import) — nothing else in the engine needs to know about it.
+  `synthTypes`/`processorTypes`/`modulatorTypes` getters expose their keys
+  read-only (`Object.keys(...)`) for callers outside this module — currently
+  just `commands.js`'s `channelHelp`/`paramObjectHelp`, so `/track_1 help`
+  can list available types without a second hardcoded copy of this list.
 - `createTrack`/`createBus`/`createSynth`/`createProcessor`/`createModulator` —
   construct + register (with the clock, and with `tracks`/`buses`/
   `processors`/`modulators` for name-based lookup) in one call. `createSynth`

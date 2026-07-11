@@ -5,7 +5,7 @@
     // meter, just reading the last sample instead of a peak, since a
     // modulator's output is a signed control signal rather than audio to
     // measure the loudness of.
-    let { modulator, audioContext, onRemove = () => {} } = $props();
+    let { modulator, audioContext, onRemove = () => {}, onInsert = () => {} } = $props();
 
     let value = $state(0);
     let paramsKey = $state("");
@@ -53,7 +53,7 @@
 
 <div class="modulator">
     <button class="remove" onclick={() => onRemove(modulator)} title="Remove {modulator.name}">×</button>
-    <div class="name">{modulator.name}</div>
+    <button class="name" title="click to insert &quot;{modulator.name}&quot; into the console" onclick={() => onInsert(modulator.name)}>{modulator.name}</button>
     <div class="meter">
         <div class="meter-track">
             <div class="meter-marker" style="left: {markerPercent}%"></div>
@@ -64,7 +64,7 @@
     </div>
     <div class="params">
         {#each paramEntries as p (p.key)}
-            <div class="param">{p.key}={p.value.toFixed(2)}</div>
+            <button class="param" title="click to insert &quot;{p.key}=&quot; into the console" onclick={() => onInsert(`${p.key}=`)}>{p.key}={p.value.toFixed(2)}</button>
         {/each}
     </div>
 </div>
@@ -101,12 +101,22 @@
     }
 
     .name {
+        font: inherit;
+        background: none;
+        border: none;
+        padding: 0;
+        padding-right: 1rem;
+        cursor: pointer;
+        text-align: left;
         font-size: 0.75rem;
         color: var(--nllc-text);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        padding-right: 1rem;
+    }
+
+    .name:hover {
+        color: var(--nllc-accent);
     }
 
     .meter-track {
@@ -138,8 +148,20 @@
         display: flex;
         flex-direction: column;
         gap: 0.15rem;
+    }
+
+    .param {
         font-family: var(--nllc-font-mono);
         font-size: 0.65rem;
         color: var(--nllc-text-dim);
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        text-align: left;
+    }
+
+    .param:hover {
+        color: var(--nllc-accent);
     }
 </style>

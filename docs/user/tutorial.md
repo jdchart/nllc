@@ -118,6 +118,46 @@ List every track at once:
 /tracks
 ```
 
+Every track/bus/master/processor/modulator also answers `help` for the full
+command and param reference, not just the one-line summary above — see
+[Getting help](commands.md#getting-help).
+
+## The console
+
+Beyond just running whatever you type, the console (the left-hand pane)
+gives you three shortcuts:
+
+- **Suggestions**: as you type a `/name` or a param key, a greyed-out
+  completion appears right after your cursor — press `→` to accept it into
+  the input (without running anything yet), or just press `Enter` to accept
+  *and* run it in one step:
+
+  ```
+  > /trac█k_1        type "/trac", see "k_1" suggested in grey
+  > /track_1 █        press → to accept — cursor lands right after, ready to keep typing
+  > /track_1 ga█in=   type "ga", see "in=" suggested
+  ```
+
+  Suggestions only appear once your cursor is at the very end of what you've
+  typed (not if you've moved it back into the middle of the line), and only
+  for the `/name` token itself or, once you're past the name, a bare param
+  key (`gain=`, `wet=`, `remove_self`, `help`, ...) — not a value. If nothing
+  matches what you've typed, no suggestion appears; keep typing and it'll
+  pick up again as soon as something does.
+- **History**: press `↑`/`↓` to recall previously submitted commands, like a
+  shell. If you'd started typing something new when you press `↑`, that
+  in-progress text is preserved — pressing `↓` back past your oldest recalled
+  command returns you to it rather than losing it. `↑`/`↓` only recall
+  history when the input is empty (or you're already mid-recall) — with
+  something freshly typed in the box, they're reserved for suggestions
+  instead (see above) and don't do anything on their own yet.
+- **Click-to-paste**: clicking a track/bus/master/processor/modulator's name
+  anywhere in the mixer (or a param label, e.g. "gain"/"pan" under a
+  fader/pan dial, or a modulator's own param readout) inserts it at the
+  console's current cursor position, ready to build a command around — click
+  `track_1`, then click `gain`, and the console reads `track_1 gain=`, cursor
+  right after the `=`.
+
 ## Ramps
 
 Add a trailing duration to `gain=`/`pan=` (or any processor param, see
@@ -158,12 +198,30 @@ addressable on its own:
 /delay feedback=0.45
 ```
 
-Run a processor with no arguments (or `help`) to see what it's called and which
-parameters it takes:
+Run a processor with no arguments to see a one-line summary, or with `help`
+for the full reference — every param (with its current value/range) and every
+command it accepts:
 
 ```
 /delay help
 ```
+```
+delay (p2): A stereo delay: independent left/right delay lines with cross-feedback (ping-pong) and a small time offset between channels for width.
+
+params:
+  time=0.375
+  feedback=0.350
+  wet=0.300
+
+commands:
+  <param>=<val>                    set instantly; add a trailing duration to ramp, e.g. wet=0.5 3 (3s) or wet=0.5 4b (4 beats)
+  at=beat|cycle                    defer a set/ramp above to the next beat/loop boundary instead of firing now
+  remove_self                      remove and delete this object
+  ...
+```
+
+(No `(range ...)` is shown here since `delay`'s params never declared bounds
+— see [objects.md](objects.md) and [Getting help](commands.md#getting-help).)
 
 Bypass it without removing it by clicking its name in the mixer's insert list (each
 track strip shows its inserts as small buttons — click to toggle bypass, shown with
@@ -256,12 +314,15 @@ active patch cable as a row, with its live depth and a remove button).
 Each track strip mirrors and controls the same state the console does: a
 vertical fader (gain, with a level meter next to it), a rotary pan dial
 (click-drag vertically), and the insert-chain buttons below that (click to
-toggle bypass, shown with strikethrough when off). Dragging these updates the
-audio graph directly — the console and mixer are just two views onto the same
-`NLLC` instance, so a `/track_1 gain=0.4` and dragging that track's fader do
-the same thing. A modulator tile and a patch row are read-only in the mixer
-today (control them from the console); their live values still update in
-real time as you type commands. Sends (`out=`/`add_send=`/etc.) are
+toggle bypass, shown with strikethrough when off; shift+click instead pastes
+that insert's id into the console — see [The console](#the-console)).
+Dragging these updates the audio graph directly — the console and mixer are
+just two views onto the same `NLLC` instance, so a `/track_1 gain=0.4` and
+dragging that track's fader do the same thing. Every strip's own name,
+"gain"/"pan" labels, a modulator's name, and each of its param readouts are
+also click-to-paste. A modulator tile and a patch row are otherwise read-only
+in the mixer today (control values from the console); their live values still
+update in real time as you type commands. Sends (`out=`/`add_send=`/etc.) are
 console-only for now too — there's no mixer UI for routing yet.
 
 Toggle the mixer pane with the collapse arrow between the console and mixer (it

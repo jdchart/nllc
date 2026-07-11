@@ -12,7 +12,8 @@ exist during SSR).
 routes/+layout.svelte              theme.css / reset.css, favicon — global chrome only
 routes/+page.svelte                just a link to /code-editor
 routes/code-editor/+page.svelte    owns the NLLC instance + executeCommand; top-level layout
-├── CodeEditor.svelte              text input + scrollback log; calls onCommand(text) prop
+├── CodeEditor.svelte              text input + scrollback log; calls onCommand(text) prop;
+│                                   owns command history (↑/↓) and exposes insertAtCursor(text)
 └── Mixer.svelte  /  CollapsedRail.svelte    (toggled by a collapse arrow)
     ├── Transport.svelte           engine on/off, clock LED, beat/bpm readout
     ├── MixerChannel.svelte        one per track, one per bus, plus one for master
@@ -21,8 +22,9 @@ routes/code-editor/+page.svelte    owns the NLLC instance + executeCommand; top-
 ```
 
 `code-editor/+page.svelte` is the only place the `NLLC` instance and its
-`createCommandRouter`-produced `executeCommand` function live; they're passed down
-as props. It also owns a `requestAnimationFrame` poll loop that diffs each of
+`createCommandRouter`-produced `executeCommand`/`suggest` functions live;
+they're passed down as props (`onCommand`/`onSuggest` on `CodeEditor`). It
+also owns a `requestAnimationFrame` poll loop that diffs each of
 `nllc.tracks`, `nllc.buses`, `nllc.modulators`, and `nllc.patches` (by
 `.name`/`.name`/`.name`/`.id` respectively, joined into a string) to detect
 additions/removals — these are plain mutable arrays, not Svelte state, since
@@ -46,6 +48,84 @@ while the strip was still mounted, `nllc.removeTrack`/`removeModulator` already
 did a blanket `.disconnect()` that silently takes the tap connection down with
 it, so the specific `.disconnect(analyser)` in the component's own cleanup
 would otherwise throw on an already-severed connection.
+
+### Click-to-paste: an imperative export, not another prop
+
+`CodeEditor.svelte` owns the console `<input>`'s text and cursor, so pasting
+into it from anywhere else in the mixer needs a way back into that
+component. Rather than duplicating the input's state as a `$bindable` prop
+(which would mean two sources of truth for the same text), `CodeEditor`
+exposes an ordinary component export — `export function insertAtCursor(text)`
+— which `code-editor/+page.svelte` reaches via `bind:this={codeEditor}` and
+wraps in a stable `insertIntoConsole(text)` callback, threaded down as an
+`onInsert` prop through `Mixer.svelte` to every `MixerChannel.svelte`/
+`ModulatorStrip.svelte` instance. Clicking a name/param label there just
+calls `onInsert(text)`; `insertAtCursor` inserts at the input's actual
+`selectionStart`/`selectionEnd` (replacing a selection if there is one), then
+refocuses and re-places the caret after what it inserted. It appends a
+trailing space unless the text already ends in `=` (so `gain=` flows straight
+into typing a value, while a bare name like `track_1` doesn't run into
+whatever's typed next). `MixerChannel`'s insert badges keep their existing
+plain-click bypass toggle and layer shift+click on top for "paste this id"
+instead, rather than taking over the primary click.
+
+### Console suggestions: ghost-text completion
+
+`createCommandRouter(nllc)` returns `{ executeCommand, suggest }` (not just
+`executeCommand` — the one call site, `code-editor/+page.svelte`, destructures
+both). `suggest(input, cursorPos)` wraps `commands.js`'s
+`suggestCompletion(nllc, topLevelNames, input, cursorPos)`, returned this way
+rather than attached as a property on `executeCommand` so both stay ordinary
+named values threaded down as two separate props (`onCommand`/`onSuggest`) to
+`CodeEditor.svelte`, instead of a function secretly carrying extra state.
+`suggestCompletion` only completes at the very end of the input (never
+mid-line) and only two token positions: the `/name` itself, or — once past
+it — a bare param key for whatever channel/processor/modulator that name
+resolves to. See
+[source-overview.md](source-overview.md#commandsjs) for the full breakdown
+of `addressableNames`/`resolveKeywordsFor`/`pickBestMatch`, and
+[adding-commands.md](adding-commands.md#keeping-suggestions-in-sync) for
+what a new command needs to stay suggestible.
+
+`CodeEditor.svelte` renders the suggestion as inline "ghost text" using a
+technique that leans on the console already being monospace: a `.ghost` div
+sits in the same box as the real `<input>` (identical font/padding/border,
+both zeroed), containing the already-typed text in an invisible
+(`visibility: hidden`) span followed by the suggested remainder in a
+visibly-greyed span. The invisible span still occupies width, so the grey
+remainder lines up exactly where the real input's own text ends — because
+both elements use the same monospace font, that alignment holds
+character-for-character without needing to measure anything in JS. Recompute
+happens imperatively (`updateSuggestion(target)`, called from `oninput`/
+`onkeyup`/`onclick` on the input) rather than through a `$effect`, reading
+straight off the DOM event's own `target.value`/`selectionStart` instead of
+the `input` state variable — this sidesteps a possible one-keystroke race if
+Svelte's own `bind:value` listener and this component's listener don't fire
+in a guaranteed order for the same native event.
+
+Right arrow accepts a showing suggestion into the input without submitting
+(`acceptSuggestion()`); Enter, when a suggestion is showing, accepts *and*
+submits in one step (`acceptSuggestion({ run: true })` — computes the
+completed string, then calls `submit()` synchronously, which is safe because
+reading a Svelte 5 `$state` variable back immediately after writing it
+reflects the new value with no render/flush needed in between). Both call
+sites share one function rather than duplicating the "how do I turn a
+suggestion into a final string" logic.
+
+Command history (↑/↓ recall) is otherwise unrelated state living entirely
+inside `CodeEditor` itself — `history` (every submitted command, oldest
+first), `historyIndex` (-1 = not browsing), and `historyDraft` (what you'd
+started typing before you pressed ↑, restored when you arrow back past the
+newest recalled entry). The two features share the same physical keys
+though: ↑/↓ only drive history when the input is empty *or* `historyIndex !==
+-1` (already mid-browse, so stepping further still works even though a
+recalled line isn't empty) — otherwise they're reserved for a future
+suggestion-cycling feature (not built — see
+[overview.md](../llm/overview.md)) and simply do nothing. A genuine `input`
+event (typing/paste/cut — as opposed to one of this component's own
+programmatic `input = ...` assignments, none of which dispatch a native
+event) always resets `historyIndex` to `-1`, so starting to type again
+correctly "leaves" history-browsing mode.
 
 ## DSP object graph
 
@@ -272,15 +352,31 @@ needing a ramp duration at all.
 
 ## Command router as a third view
 
-`createCommandRouter(nllc)` closes over the live `NLLC` instance and returns a
-single `executeCommand(text)` function — it does not maintain any state of its
-own. Dispatch is by name lookup against `nllc.tracks`/`nllc.buses`/
+`createCommandRouter(nllc)` closes over the live `NLLC` instance and returns
+`{ executeCommand, suggest }` — see
+[Console suggestions](#console-suggestions-ghost-text-completion) above for
+`suggest`; neither function maintains any state of its own beyond that
+closure. Dispatch is by name lookup against `nllc.tracks`/`nllc.buses`/
 `nllc.processors`/`nllc.modulators`/`master` at call time, so newly created
 tracks/buses/processors/modulators are addressable immediately with no
 registration step beyond what `NLLC.createTrack`/`createBus`/`createProcessor`/
 `createModulator` already do. A bus dispatches through the exact same
 `channelCommand` a track does — see [adding-commands.md](adding-commands.md)
 for extending it.
+
+Every addressable object answers three ways: no params (`channelSummary`/
+`paramObjectSummary` — a condensed one-liner), `help` (`channelHelp`/
+`paramObjectHelp` — every param with its live value and range, plus every
+command that kind of object accepts, spelled out), or an actual param/command
+to run. The full-help builders list available `synth=`/`add_processor=`/
+`add_modulator` type names via `nllc.synthTypes`/`processorTypes`/
+`modulatorTypes` (thin getters over `nllc.js`'s private `SYNTH_TYPES`/
+`PROCESSOR_TYPES`/`MODULATOR_TYPES` registries) rather than hardcoding the
+list, so a new registered type shows up in help automatically. A param's
+range is only printed when `NLLCParam.min`/`max` are actually finite
+(`formatParamLine`) — several existing params (e.g. `NLLCReverb.wet`,
+`NLLCLFO.freq`) were never given bounds, and printing `-Infinity..Infinity`
+for those would be noise, not information.
 
 ## Why this shape
 

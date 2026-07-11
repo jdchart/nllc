@@ -115,6 +115,16 @@ function formatValue(value) {
     return typeof value === "number" ? value.toFixed(3) : String(value);
 };
 
+// "key=value (range min..max)" for a help listing — the range is omitted
+// when a param never declared bounds (e.g. NLLCReverb's wet, NLLCLFO's
+// freq, both currently unclamped; see NLLCParam's -Infinity/Infinity
+// defaults), since printing "-Infinity..Infinity" would just be noise.
+function formatParamLine(key, param) {
+    const hasRange = Number.isFinite(param.min) || Number.isFinite(param.max);
+    const range = hasRange ? ` (range ${param.min}..${param.max})` : "";
+    return `  ${key}=${formatValue(param.get())}${range}`;
+};
+
 // The one place that knows how to get/set/ramp/defer a param (an NLLCParam —
 // see param.js) against a parsed command value. Shared by channelCommand
 // (gain/pan), paramObjectCommand (every processor/modulator param), and the
@@ -178,6 +188,43 @@ function channelSummary(channel) {
     return `${channel.name} — ${gain} ${pan} inserts=[${inserts}] sends=[${sends}]${synth}`;
 };
 
+// Full reference text for `/track_1 help` (also master/any bus) — everything
+// channelSummary condenses to one line, spelled out: every param with its
+// live value and range, then every command this channel kind accepts.
+// Doesn't need per-param prose descriptions (unlike, say, a synth's own
+// waveform choices might one day want) since gain/pan are just the two
+// generic channel params every NLLCChannel has — the command list below is
+// what actually needs spelling out.
+function channelHelp(nllc, channel) {
+    const lines = [channelSummary(channel), "", "params:"];
+    for (const [key, param] of Object.entries(channel.params)) {
+        lines.push(formatParamLine(key, param));
+    }
+
+    lines.push("", "commands:");
+    lines.push("  gain=<val> / pan=<val>          set instantly; add a trailing duration to ramp, e.g. gain=0 3 (3s) or gain=0 4b (4 beats)");
+    lines.push("  at=beat|cycle                    defer a set/ramp above to the next beat/loop boundary instead of firing now");
+    if (channel.source) {
+        lines.push(`  synth=<type>                     swap this track's synth (${nllc.synthTypes.join(", ")})`);
+        lines.push("  add_event beat= pitch=|degree= velocity= duration=   append a note event (all optional except beat)");
+        lines.push("  clear_events                     empty this synth's pattern");
+        lines.push("  start / stop                     pause/resume this synth's transport (routing untouched)");
+    } else {
+        lines.push("  (no synth here — add_event/clear_events/start/stop/synth= are no-ops on master/buses)");
+    }
+    lines.push(`  add_processor=<type>             insert an effect at the end of the chain (${nllc.processorTypes.join(", ")})`);
+    lines.push("  remove_processor=<id>            remove an insert by id");
+    lines.push("  out=<name>                       replace every current send with a single one to <name>");
+    lines.push("  add_send=<name> [send_gain=]     add another simultaneous send (default gain 1)");
+    lines.push("  remove_send=<id>                 remove one send");
+    lines.push("  send=<id> [send_gain=]           report, or ramp/set, one existing send's own gain");
+    if (channel !== nllc.master) lines.push("  remove_self                      delete this channel");
+    lines.push(`  (this channel's post-fader output can be a patch source: /patch source=${channel.name} dest=<name.param>)`);
+    lines.push("  help                             show this text");
+
+    return lines.join("\n");
+};
+
 // Every track, bus, and master is addressable by its own name, e.g.
 // /track_1 gain=0.5. gain is a 0-1 position, exponentially tapered onto the
 // actual AudioParam; pan is linear -1..1. Either can instead be ramped by
@@ -201,6 +248,7 @@ function channelSummary(channel) {
 // master and any bus have no synth, so start/stop/synth/add_event/
 // clear_events are no-ops there.
 function channelCommand(nllc, channel, params) {
+    if (params.help) return channelHelp(nllc, channel);
     if (Object.keys(params).length === 0) return channelSummary(channel);
 
     if (params.remove_self) {
@@ -321,7 +369,14 @@ function channelCommand(nllc, channel, params) {
     }
 
     if ("remove_processor" in params) {
-        const removed = channel.removeProcessor(params.remove_processor);
+        // Must go through nllc.removeProcessor (not channel.removeProcessor
+        // directly) so the processor is also deregistered from nllc.processors
+        // and the clock, and any patch sourced from its output is cascade-
+        // removed first — channel.removeProcessor alone only unwires it from
+        // this one chain, leaving it as an orphaned "ghost" still addressable
+        // by name and still ticking on the clock.
+        const processor = channel.processors.find((p) => p.id === params.remove_processor);
+        const removed = processor ? nllc.removeProcessor(processor) : false;
         results.push(removed
             ? `removed ${params.remove_processor}`
             : `no processor "${params.remove_processor}" on ${channel.name}`);
@@ -341,6 +396,26 @@ function paramObjectSummary(object) {
     return `${object.name}${idSuffix}: ${object.llm_summary} [${paramList}]`;
 };
 
+// Full reference text for `/reverb1 help` / `/lfo1 help` — every param with
+// its live value and range, plus the generic set/ramp/at=/remove_self/patch
+// commands every processor and modulator shares (see paramObjectCommand).
+function paramObjectHelp(nllc, object) {
+    const idSuffix = object.id ? ` (${object.id})` : "";
+    const lines = [`${object.name}${idSuffix}: ${object.llm_summary}`, "", "params:"];
+    for (const [key, param] of Object.entries(object.params)) {
+        lines.push(formatParamLine(key, param));
+    }
+
+    lines.push("", "commands:");
+    lines.push("  <param>=<val>                    set instantly; add a trailing duration to ramp, e.g. wet=0.5 3 (3s) or wet=0.5 4b (4 beats)");
+    lines.push("  at=beat|cycle                    defer a set/ramp above to the next beat/loop boundary instead of firing now");
+    lines.push("  remove_self                      remove and delete this object");
+    lines.push(`  (this object's output can be a patch source: /patch source=${object.name} dest=<name.param>)`);
+    lines.push("  help                             show this text");
+
+    return lines.join("\n");
+};
+
 // Shared by processorCommand and modulatorCommand: both are addressed by
 // their own name (e.g. /reverb wet=0.5, /lfo1 freq=3) and expose the same
 // generic surface — a `.params` map of NLLCParam (see param.js). This
@@ -355,9 +430,8 @@ function paramObjectCommand(nllc, object, params, removeSelf) {
         return `${object.name} removed`;
     }
 
-    if (params.help || Object.keys(params).length === 0) {
-        return paramObjectSummary(object);
-    }
+    if (params.help) return paramObjectHelp(nllc, object);
+    if (Object.keys(params).length === 0) return paramObjectSummary(object);
 
     const { startTime, label, warning } = resolveStartTime(nllc.clock, params.at);
     const results = warning ? [warning] : [];
@@ -381,6 +455,115 @@ function modulatorCommand(nllc, modulator, params) {
 // One-line summary for /patches, e.g. "x1: lfo1 -> reverb.wet (depth 0.30)".
 function patchSummary(patch) {
     return `${patch.id}: ${patch.sourceName} -> ${patch.destName} (depth ${patch.depth.value.toFixed(2)})`;
+};
+
+// Keywords channelCommand accepts beyond gain=/pan= (which come straight off
+// channel.params — see channelKeywordsFor). One list, used only by the
+// console's ghost-text suggestions (suggestCompletion below) — channelHelp's
+// text stays separately hand-written prose, since each line there also
+// carries its own usage note that doesn't reduce to a bare keyword. A
+// trailing "=" marks a value-taking key (so the console doesn't add a
+// trailing space after accepting it — see CodeEditor.svelte's
+// insertAtCursor/acceptSuggestion, which both understand the same "=" tail
+// convention).
+const CHANNEL_ACTION_KEYWORDS = [
+    "add_event", "clear_events", "start", "stop", "synth=", "add_processor=",
+    "remove_processor=", "out=", "add_send=", "remove_send=", "send=", "at=",
+    "remove_self", "help",
+];
+
+// Same idea for processor/modulator commands beyond their own params.
+const PARAM_OBJECT_ACTION_KEYWORDS = ["at=", "remove_self", "help"];
+
+function channelKeywordsFor(channel) {
+    return [...Object.keys(channel.params).map((key) => `${key}=`), ...CHANNEL_ACTION_KEYWORDS];
+};
+
+function paramObjectKeywordsFor(object) {
+    return [...Object.keys(object.params).map((key) => `${key}=`), ...PARAM_OBJECT_ACTION_KEYWORDS];
+};
+
+// Every name addressable as `/name`, for completing the command/object-name
+// token. Deliberately *not* executeOne's dispatch order (top-level commands
+// first) — objects come first here instead, since a user-chosen name is the
+// higher-value thing to complete and there are only a handful of top-level
+// commands to begin with. This also resolves the one real collision today:
+// without it, typing "/trac" would suggest the built-in `/tracks` (a valid
+// prefix match) ahead of an actual track named "track_1".
+function addressableNames(nllc, topLevelNames) {
+    return [
+        "master",
+        ...nllc.tracks.map((t) => t.name),
+        ...nllc.buses.map((b) => b.name),
+        ...nllc.processors.map((p) => p.name),
+        ...nllc.modulators.map((m) => m.name),
+        ...topLevelNames,
+    ];
+};
+
+// Resolves a already-typed command name to the keyword list valid after it —
+// null for a top-level command (add_track=/clock=/etc.'s own params aren't
+// covered by suggestions yet, only channel/processor/modulator param+command
+// keys) or an unrecognized name.
+function resolveKeywordsFor(nllc, name) {
+    if (name === "master") return channelKeywordsFor(nllc.master);
+
+    const channel = nllc.tracks.find((t) => t.name === name) ?? nllc.buses.find((b) => b.name === name);
+    if (channel) return channelKeywordsFor(channel);
+
+    const paramObject = nllc.processors.find((p) => p.name === name) ?? nllc.modulators.find((m) => m.name === name);
+    if (paramObject) return paramObjectKeywordsFor(paramObject);
+
+    return null;
+};
+
+// First candidate that extends (but isn't identical to) `partial` — no
+// ranking/cycling for now (see docs/llm/overview.md), just one deterministic
+// guess that narrows as more characters are typed.
+function pickBestMatch(candidates, partial) {
+    return candidates.find((candidate) => candidate !== partial && candidate.startsWith(partial)) ?? null;
+};
+
+// Ghost-text completion for the console (CodeEditor.svelte): given the full
+// input text and the cursor position, returns { start, full } (the absolute
+// index the current token starts at, and the complete candidate string it
+// could complete to) or null if there's nothing to suggest. Deliberately
+// restricted to the cursor sitting at the very end of the input — mid-line
+// completion would need the ghost text to render inside the typed text
+// rather than after it, which the simple typed-prefix-is-invisible overlay
+// technique in CodeEditor.svelte can't do.
+//
+// Only completes two token positions: the /name itself (any top-level
+// command or addressable object), and — once past the name — a bare param
+// *key* for a resolved channel/processor/modulator (not a value; a token
+// already containing "=" is mid-value and isn't completed here).
+function suggestCompletion(nllc, topLevelNames, input, cursorPos) {
+    if (cursorPos !== input.length) return null;
+
+    const lastSlash = input.lastIndexOf("/", cursorPos - 1);
+    if (lastSlash === -1) return null;
+
+    const typed = input.slice(lastSlash); // e.g. "/track_1 ga"
+    const firstSpace = typed.indexOf(" ");
+
+    if (firstSpace === -1) {
+        const partial = typed.slice(1);
+        if (!partial) return null;
+        const match = pickBestMatch(addressableNames(nllc, topLevelNames), partial);
+        return match ? { start: lastSlash + 1, full: match } : null;
+    }
+
+    const name = typed.slice(1, firstSpace);
+    const paramsText = typed.slice(firstSpace + 1);
+    const lastSpaceInParams = paramsText.lastIndexOf(" ");
+    const currentToken = lastSpaceInParams === -1 ? paramsText : paramsText.slice(lastSpaceInParams + 1);
+    if (!currentToken || currentToken.includes("=")) return null;
+
+    const keywords = resolveKeywordsFor(nllc, name);
+    if (!keywords) return null;
+
+    const match = pickBestMatch(keywords, currentToken);
+    return match ? { start: cursorPos - currentToken.length, full: match } : null;
 };
 
 // Builds the single executeCommand(text) function the UI calls for every
@@ -509,6 +692,10 @@ export function createCommandRouter(nllc) {
         },
     };
 
+    // Computed once (not per suggest() call) since `commands`'s own keys
+    // never change after this router is built.
+    const topLevelNames = Object.keys(commands);
+
     // Wraps a handler so a thrown error becomes a console-printable string
     // instead of crashing the session — handlers don't need their own
     // try/catch.
@@ -570,9 +757,20 @@ export function createCommandRouter(nllc) {
     };
 
     // The single entry point the UI calls for every console submission.
-    return function executeCommand(text) {
+    function executeCommand(text) {
         const segments = splitCommands(text);
         if (segments.length === 0) return `unrecognized: "${text}" (commands must start with /)`;
         return segments.map(executeOne).join("\n");
     };
+
+    // Ghost-text completion for CodeEditor.svelte — see suggestCompletion.
+    // Returned alongside executeCommand (rather than attached to it as a
+    // property) so both stay ordinary named values at the call site; they
+    // share this closure's `commands`/`topLevelNames` so a new top-level
+    // command is suggestible with no separate list to keep in sync.
+    function suggest(input, cursorPos) {
+        return suggestCompletion(nllc, topLevelNames, input, cursorPos);
+    };
+
+    return { executeCommand, suggest };
 };

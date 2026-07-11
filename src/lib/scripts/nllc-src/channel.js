@@ -145,19 +145,41 @@ export class NLLCChannel {
     // just muted) -> panner -> gainNode. This is the only place nodes are
     // connected/disconnected; every mutating method above just edits the
     // `processors` array and calls this to make the graph match it.
+    //
+    // Tears down only the specific chain-internal edge each source (this.input,
+    // or a processor's own output) was last connected to (tracked in
+    // this._chainTarget / processor._chainTarget), rather than a blanket
+    // .disconnect() — a processor's output can also be a patch source (see
+    // patch.js) or, in principle, a standalone NLLCProcessor.connect() target;
+    // a blanket disconnect would silently tear that external connection down
+    // too every time an unrelated processor elsewhere in this same chain is
+    // added/removed/bypassed.
     _rewireChain() {
-        this.input.disconnect();
+        if (this._chainTarget) {
+            this.input.disconnect(this._chainTarget);
+            this._chainTarget = null;
+        }
         for (const processor of this.processors) {
-            processor.output.disconnect();
+            if (processor._chainTarget) {
+                processor.output.disconnect(processor._chainTarget);
+                processor._chainTarget = null;
+            }
         }
 
         let node = this.input;
+        let prevOwner = null; // null while `node` is still this.input
         for (const processor of this.processors) {
             if (!processor.active) continue;
             node.connect(processor.input);
+            if (prevOwner) prevOwner._chainTarget = processor.input;
+            else this._chainTarget = processor.input;
+
             node = processor.output;
+            prevOwner = processor;
         }
 
         node.connect(this.panner);
+        if (prevOwner) prevOwner._chainTarget = this.panner;
+        else this._chainTarget = this.panner;
     };
 };

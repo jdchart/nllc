@@ -65,6 +65,22 @@ export class NLLC {
         this.clock.addUnit(this.master);
     };
 
+    // Registered type names (see PROCESSOR_TYPES/SYNTH_TYPES/MODULATOR_TYPES
+    // above) — exposed read-only so callers (e.g. commands.js's help text)
+    // can list what's available without reaching into this module's private
+    // registries directly.
+    get synthTypes() {
+        return Object.keys(SYNTH_TYPES);
+    };
+
+    get processorTypes() {
+        return Object.keys(PROCESSOR_TYPES);
+    };
+
+    get modulatorTypes() {
+        return Object.keys(MODULATOR_TYPES);
+    };
+
     // audioContext.resume() must run synchronously within a user-gesture
     // call stack (e.g. a keydown handler), which /start satisfies.
     start() {

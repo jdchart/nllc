@@ -59,6 +59,28 @@ shape at all — it's a top-level command that branches on `id=` (adjust) vs.
 `source=`/`dest=` (create); read it directly in `commands.js` if you're
 adding another object kind shaped like this.
 
+**Keeping `/name help` in sync**: `channelHelp`/`paramObjectHelp` in
+`commands.js` are hand-written reference strings, not generated from the
+command branches — a new channel command (case 3) or rampable param (case 2)
+needs its own line added there too. New param values/ranges and new
+`synth=`/`add_processor=`/`add_modulator` type names show up automatically
+(`formatParamLine` reads the object's own `params`; the type lists read
+`nllc.synthTypes`/`processorTypes`/`modulatorTypes`) — only new *commands*
+need a manual help-text update.
+
+**Keeping console suggestions (ghost-text completion) in sync**:
+`createCommandRouter(nllc)` returns `{ executeCommand, suggest }`, not just
+`executeCommand` — `suggest(input, cursorPos)` is `commands.js`'s
+`suggestCompletion`, consumed by `CodeEditor.svelte` (see
+`docs/dev/architecture.md`'s "Console suggestions" section). A new top-level
+command (case 1) is suggestible for free (`suggest` reads
+`Object.keys(commands)`); a new rampable param (case 2) is too
+(`resolveKeywordsFor` reads the object's own `params`). A new non-rampable
+channel field (case 3) needs a manual addition to `commands.js`'s
+`CHANNEL_ACTION_KEYWORDS`/`PARAM_OBJECT_ACTION_KEYWORDS` — the same "new
+commands need a manual list update, params/types don't" split `help` has,
+just a second list.
+
 If a param genuinely shouldn't be rampable (like `/clock num_beats=` — a
 fractional, shifting loop length makes no sense), reject a ramp spec
 explicitly with a message rather than silently applying just the `.value`

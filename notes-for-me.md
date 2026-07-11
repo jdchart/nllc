@@ -15,14 +15,9 @@
 - group params in order to save their state, control them etc ?
 
 ## UI & syntax
-- code suggestions and history (like an intelligent console)
-- clicking on an item in ui pastes that thing into at the current cursor
-
 - feedback of the current synth on a track
-- add a button to track to destroy track (like the others)
 - proper scrolling for mixing panes
 - allow for modifying of sizes and hiding of mixer different panes
-- right now track list and master track are misaligned because of title
 - processors - greenturoquoise color theme when active 
 
 - if we have dest=track_1.gain, we should be able to do /track_1.gain = 0.5

@@ -1,17 +1,24 @@
 <script>
     import { untrack } from "svelte";
-    import { positionToGain, gainToPosition } from "$lib/scripts/nllc-src/taper";
 
-    let { label, audioContext, channel } = $props();
+    // onRemove is only passed for tracks/buses (see Mixer.svelte) — master
+    // can't be removed, so leaving it undefined there hides the button below
+    // rather than wiring it to a no-op.
+    let { label, audioContext, channel, onInsert = () => {}, onRemove } = $props();
     const node = $derived(channel.gainNode);
+    const gainParam = $derived(channel.params.gain);
+    const panParam = $derived(channel.params.pan);
 
-    // "position" is the fader's linear 0-1 position; it's exponentially
-    // tapered onto the node's actual (also 0-1) gain for perceptually-even steps.
-    let position = $state(untrack(() => gainToPosition(node.gain.value)));
+    // "position" is the fader's linear 0-1 position; channel.params.gain's own
+    // decode/encode (the same NLLCParam/taper.js exponential curve the
+    // console's gain=/ramp path uses — see param.js/channel.js) turns it into
+    // the node's actual 0-1 gain value, so the fader and the console share
+    // exactly one taper implementation instead of two.
+    let position = $state(untrack(() => gainParam.get()));
     let level = $state(0);
     let dragging = false;
 
-    let pan = $state(untrack(() => channel.pan.value));
+    let pan = $state(untrack(() => panParam.get()));
     let panDragging = false;
 
     let processorIds = $state("");
@@ -44,8 +51,8 @@
 
             // Reflect gain/pan changes from console commands or automation,
             // but don't fight the user while they're actively dragging.
-            if (!dragging) position = gainToPosition(node.gain.value);
-            if (!panDragging) pan = channel.pan.value;
+            if (!dragging) position = gainParam.get();
+            if (!panDragging) pan = panParam.get();
 
             const currentIds = channel.processors.map((p) => `${p.id}:${p.active}`).join(",");
             if (currentIds !== processorIds) {
@@ -70,14 +77,14 @@
 
     function handleInput(event) {
         position = Number(event.target.value);
-        node.gain.cancelScheduledValues(audioContext.currentTime);
-        node.gain.setTargetAtTime(positionToGain(position), audioContext.currentTime, 0.01);
+        gainParam.audioParam.cancelScheduledValues(audioContext.currentTime);
+        gainParam.audioParam.setTargetAtTime(gainParam.encode(position), audioContext.currentTime, 0.01);
     };
 
     function setPan(value) {
-        pan = Math.max(-1, Math.min(1, value));
-        channel.pan.cancelScheduledValues(audioContext.currentTime);
-        channel.pan.setTargetAtTime(pan, audioContext.currentTime, 0.01);
+        pan = panParam.clamp(value);
+        panParam.audioParam.cancelScheduledValues(audioContext.currentTime);
+        panParam.audioParam.setTargetAtTime(panParam.encode(pan), audioContext.currentTime, 0.01);
     };
 
     // Rotary dial: drag vertically to change value, like a mixing-console knob
@@ -103,6 +110,15 @@
         window.addEventListener("pointerup", handlePanPointerUp);
     };
 
+    // Bypass-toggling an insert is the common case and stays a plain click;
+    // shift+click instead pastes its id into the console (e.g. to target it
+    // directly, /p1 wet=0.5), matching the modifier-click convention used
+    // nowhere else yet in this app but familiar from most editors/DAWs.
+    function handleInsertClick(event, proc) {
+        if (event.shiftKey) onInsert(proc.id);
+        else channel.setProcessorActive(proc.id, !proc.active);
+    };
+
     const meterHeight = $derived(Math.min(1, level) * 100);
     const meterColor = $derived(
         level > 0.85 ? "var(--nllc-meter-hot)" : level > 0.6 ? "var(--nllc-meter-mid)" : "var(--nllc-meter-low)"
@@ -111,6 +127,9 @@
 </script>
 
 <div class="channel">
+    {#if onRemove}
+        <button class="remove" onclick={() => onRemove(channel)} title="Remove {label}">×</button>
+    {/if}
     <div class="meter-and-fader">
         <div class="meter">
             <div class="meter-fill" style="height: {meterHeight}%; background: {meterColor};"></div>
@@ -127,27 +146,30 @@
             onpointerup={() => dragging = false}
         />
     </div>
+    <button class="param-label" title="click to insert &quot;gain=&quot; into the console" onclick={() => onInsert("gain=")}>gain</button>
 
     <div class="pan-dial" role="slider" tabindex="0" onpointerdown={handlePanPointerDown} aria-label="Pan" aria-valuemin="-1" aria-valuemax="1" aria-valuenow={pan}>
         <div class="pan-dial-indicator" style="transform: rotate({panAngle}deg)"></div>
     </div>
+    <button class="param-label" title="click to insert &quot;pan=&quot; into the console" onclick={() => onInsert("pan=")}>pan</button>
 
     <div class="inserts">
         {#each processorList as proc (proc.id)}
             <button
                 class="insert"
                 class:inactive={!proc.active}
-                title="{proc.id} — click to {proc.active ? 'bypass' : 'enable'}"
-                onclick={() => channel.setProcessorActive(proc.id, !proc.active)}
+                title="{proc.id} — click to {proc.active ? 'bypass' : 'enable'}, shift+click to insert into console"
+                onclick={(event) => handleInsertClick(event, proc)}
             >{proc.name}</button>
         {/each}
     </div>
 
-    <div class="label">{label}</div>
+    <button class="label" title="click to insert &quot;{label}&quot; into the console" onclick={() => onInsert(label)}>{label}</button>
 </div>
 
 <style>
     .channel {
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -158,6 +180,23 @@
         border: 1px solid var(--nllc-border);
         border-radius: 4px;
         flex-shrink: 0;
+    }
+
+    .remove {
+        position: absolute;
+        top: 2px;
+        right: 4px;
+        background: none;
+        border: none;
+        color: var(--nllc-text-dim);
+        cursor: pointer;
+        font-size: 0.8rem;
+        line-height: 1;
+        padding: 0;
+    }
+
+    .remove:hover {
+        color: var(--nllc-meter-hot);
     }
 
     .inserts {
@@ -242,6 +281,11 @@
     }
 
     .label {
+        font: inherit;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
         font-size: 0.7rem;
         color: var(--nllc-text-dim);
         text-align: center;
@@ -249,5 +293,25 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+
+    .label:hover {
+        color: var(--nllc-accent);
+    }
+
+    .param-label {
+        font: inherit;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        font-size: 0.6rem;
+        color: var(--nllc-text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .param-label:hover {
+        color: var(--nllc-accent);
     }
 </style>

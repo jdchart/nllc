@@ -9,6 +9,8 @@
 - `name` is either a top-level command, or the name of an existing track, the
   master channel, a processor, or a modulator.
 - A bare `key` with no `=` is a boolean flag: `/reverb help` sets `params.help = true`.
+  Every track, bus, master, processor, and modulator understands `help` this
+  way — see [Getting help](#getting-help) below.
 - Values are parsed automatically: `0.5` / `-2` → number, `true`/`false` → boolean,
   anything else → string. Quote a value to include spaces or force it to be a
   string: `name="lead synth"`.
@@ -30,6 +32,45 @@
   `/clock bpm=notanumber` reports an error and leaves `bpm` untouched, rather
   than setting it to `NaN`).
 
+## Getting help
+
+Every track, bus, master, processor, and modulator responds to three
+"introspect, don't change anything" forms:
+
+| Form | Shows |
+|---|---|
+| `/name` (no params) | A one-line summary: current param values, and (for a channel) its inserts/sends/synth. |
+| `/name help` | The full reference: every param with its current value and range, plus every command that object accepts, each with a short usage note. |
+| `/tracks`, `/buses`, `/modulators` | The one-line summary for every object of that kind, one per line. |
+
+```
+/track_1
+track_1 — gain=0.80 pan=0.00 inserts=[p1:reverb] sends=[s1:master(1.00)] synth=oscsynth("...")
+
+/track_1 help
+track_1 — gain=0.80 pan=0.00 inserts=[p1:reverb] sends=[s1:master(1.00)] synth=oscsynth("...")
+
+params:
+  gain=0.800 (range 0..1)
+  pan=0.000 (range -1..1)
+
+commands:
+  gain=<val> / pan=<val>          set instantly; add a trailing duration to ramp, e.g. gain=0 3 (3s) or gain=0 4b (4 beats)
+  at=beat|cycle                    defer a set/ramp above to the next beat/loop boundary instead of firing now
+  synth=<type>                     swap this track's synth (oscsynth, sampler)
+  add_event beat= pitch=|degree= velocity= duration=   append a note event (all optional except beat)
+  ...
+```
+
+A param whose range was never declared (e.g. a processor's `wet`, an lfo's
+`freq` — see [objects.md](objects.md)) shows just its current value, with no
+`(range ...)` suffix. `help` works identically on master, any bus, any
+processor, and any modulator — the exact command list shown differs by kind
+(see the [Channel](#channel-commands-master-or-any-trackbus-by-name),
+[Processor](#processor-commands-any-processor-by-nameid-derived-name-eg-reverb-delay),
+and [Modulator](#modulator-commands-any-modulator-by-name-eg-lfo1) sections
+below).
+
 ## Top-level commands
 
 | Command | Effect |
@@ -50,7 +91,9 @@
 
 ## Channel commands (`/master`, or any track/bus by name)
 
-Run with no parameters to get a one-line summary:
+Run with no parameters to get a one-line summary, or with `help` for the full
+reference (every command below, with its own usage note — see
+[Getting help](#getting-help)):
 
 ```
 track_1 — gain=0.80 pan=0.00 inserts=[p1:reverb] sends=[s1:master(1.00)] synth=oscsynth("...") (stopped)
@@ -80,8 +123,9 @@ Multiple params can be combined in one command: `/track_1 gain=0.5 pan=-0.2`.
 
 ## Processor commands (any processor by name/id-derived name, e.g. `/reverb`, `/delay`)
 
-Run with no parameters, or with `help`, to see its description and current
-parameter values:
+Run with no parameters for a one-line summary, or with `help` for the full
+reference (every param plus every command, see
+[Getting help](#getting-help)):
 
 ```
 /reverb
@@ -95,12 +139,12 @@ reverb (p1): A simple algorithmic reverb: convolution against a generated impuls
 
 ## Modulator commands (any modulator by name, e.g. `/lfo1`)
 
-Work exactly like processor commands — run with no parameters, or with
-`help`, to see the modulator's description and current parameter values; set
-any param (rampable, deferrable, patchable, same as a processor); `remove_self`
-removes it (and any patch touching it, whether it's the patch's source or —
-if you've patched something *into* the modulator, e.g. FM-modulating an LFO's
-own `freq` — its destination).
+Work exactly like processor commands — no parameters for a one-line summary,
+`help` for the full reference; set any param (rampable, deferrable,
+patchable, same as a processor); `remove_self` removes it (and any patch
+touching it, whether it's the patch's source or — if you've patched
+something *into* the modulator, e.g. FM-modulating an LFO's own `freq` — its
+destination).
 
 ```
 /lfo1

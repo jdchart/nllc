@@ -49,9 +49,13 @@ export class NLLCSampler extends NLLCSynth {
 
     // Selects a slot by event.pitch, wrapping (including for negative
     // pitches, hence the double modulo) rather than throwing out of range,
-    // and plays it once through a simple velocity-scaled gain.
+    // and plays it once through a simple velocity-scaled gain. A sampler
+    // doesn't resolve harmony, so an event authored with degree= instead of
+    // pitch= (valid generically on add_event) leaves pitch undefined; falls
+    // back to slot 0 rather than silently NaN-ing out to no sound at all.
     trigger(time, event, secondsPerBeat) {
-        const slot = this.slots[((event.pitch % this.slots.length) + this.slots.length) % this.slots.length];
+        const pitch = event.pitch ?? 0;
+        const slot = this.slots[((pitch % this.slots.length) + this.slots.length) % this.slots.length];
         if (!slot?.buffer) return;
 
         const source = this.audioContext.createBufferSource();

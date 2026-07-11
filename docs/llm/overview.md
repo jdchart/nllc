@@ -136,6 +136,11 @@ destination given) targets `master`. `add_event`/`clear_events`/`start`/
 `stop`/`synth=` are no-ops (reported as "\<name\> has no synth") on master and
 on any bus, since neither has a `.source`. Processors and modulators support
 their own `params` keys plus `remove_self`, and `help`/no-args to introspect.
+Every addressable object (channel, processor, modulator) answers no-args with
+a condensed one-line summary and `help` with the full reference — every
+param's value/range plus every command it accepts, each with a usage note
+(`channelHelp`/`paramObjectHelp` in `commands.js`; a param's range is omitted
+when it was never given `min`/`max` bounds, e.g. `NLLCReverb.wet`).
 `/clock` supports `bpm=` (rampable) and `num_beats=` (deliberately not
 rampable — rejected with a message if given a ramp spec).
 
@@ -161,18 +166,42 @@ becoming `NaN` and corrupting persistent state.
 
 `src/routes/code-editor/+page.svelte` owns the single `NLLC` instance (created
 client-side only, in `onMount`, since `AudioContext` needs a browser) and the
-`executeCommand` function from `createCommandRouter(nllc)`. `CodeEditor.svelte` is
-the text console; `Mixer.svelte` (with titled "Tracks"/"Buses"/"Modulators"
-sections, each showing "none" when empty) composes `MixerChannel.svelte` (one
-per track, one per bus, plus master — a bus needs no changes to this component
-since it only ever touches `gainNode`/`pan`/`processors`, all present on any
-`NLLCChannel`), `ModulatorStrip.svelte` (one per modulator, with a live bipolar
-meter), and `PatchList.svelte` (every active patch, with its live depth and a
-remove control) — all polled, read/write views onto the same live audio-graph
-objects (fader ↔ `channel.params.gain`, pan dial ↔ `channel.params.pan`, etc.).
+`{ executeCommand, suggest }` pair from `createCommandRouter(nllc)`.
+`CodeEditor.svelte` is
+the text console; `Mixer.svelte` (with titled "Tracks"/"Buses"/"Master"/
+"Modulators" sections, each showing "none" when empty except Master) composes
+`MixerChannel.svelte` (one per track, one per bus, plus master — a bus needs
+no changes to this component since it only ever touches `gainNode`/`pan`/
+`processors`, all present on any `NLLCChannel`), `ModulatorStrip.svelte` (one
+per modulator, with a live bipolar meter), and `PatchList.svelte` (every
+active patch, with its live depth and a remove control) — all polled,
+read/write views onto the same live audio-graph objects (fader ↔
+`channel.params.gain`, pan dial ↔ `channel.params.pan`, etc.). A track/bus
+strip (not master) also has its own remove (×) button, mirroring
+`ModulatorStrip`'s, wired to `nllc.removeTrack`/`removeBus` — the mixer's one
+other removal affordance beyond `remove_self` on the console.
 Console and mixer are two UIs on one shared state, not separate stores. Sends
 are console-only for now — no mixer UI for `add_send=`/`out=` yet, same
-scope choice already made for modulators/patches.
+scope choice already made for modulators/patches. `CodeEditor.svelte` also
+owns command history (↑/↓ recall, shell-style) and exposes an
+`insertAtCursor(text)` component export (reached via `bind:this` from
+`+page.svelte`, threaded down through `Mixer`/`MixerChannel`/`ModulatorStrip`
+as an `onInsert` prop) — clicking a name or param label anywhere in the mixer
+pastes it into the console at the current cursor. A processor's insert badge
+keeps plain-click as its existing bypass toggle and layers shift+click on top
+for "paste this id" instead of replacing it.
+
+`CodeEditor.svelte` also renders contextual ghost-text completion, driven by
+`suggest(input, cursorPos)` (`commands.js`'s `suggestCompletion` — completes
+only at the very end of the input: the `/name` token itself, i.e. any
+addressable object or top-level command, or, once past the name, a bare
+param key for whatever channel/processor/modulator it resolves to; a token
+already containing `=` is mid-value and isn't completed, and there's no
+ranking/cycling among several matches yet, just the first one that extends
+what's typed). Right arrow accepts a shown suggestion into the input; Enter
+accepts *and* submits in one step. `↑`/`↓` normally recall command history,
+but only when the input is empty (or mid-recall already) — otherwise they're
+reserved for a not-yet-built suggestion-cycling feature and do nothing.
 
 ## Known current limitations (don't assume otherwise)
 

@@ -81,9 +81,47 @@ which is exactly the kind of bug that can otherwise persist long after the
 one bad command that caused it (see `toNumber`'s doc comment in
 `commands.js`).
 
+## Keeping `help` in sync
+
+`/name help` (any channel, processor, or modulator) is a hand-written
+reference string — `channelHelp`/`paramObjectHelp` in `commands.js`, not
+generated from the `channelCommand`/`paramObjectCommand` branches themselves.
+Adding a new channel-level command (step 3 above) or a new rampable param
+(step 2) means adding its own line to the relevant help builder too — nothing
+enforces the two staying in sync automatically. New param values/ranges *do*
+show up for free (`formatParamLine` reads straight off the object's own
+`params` map), and a new synth/processor/modulator type shows up for free in
+any `synth=`/`add_processor=`/`add_modulator` help line too (they read
+`nllc.synthTypes`/`processorTypes`/`modulatorTypes`) — it's specifically new
+*commands* (not new params or types) that need a manual help-text line.
+
+## Keeping suggestions in sync
+
+The console's ghost-text completion (`suggest(input, cursorPos)`, the second
+value `createCommandRouter` returns — see
+[architecture.md](architecture.md#console-suggestions-ghost-text-completion))
+has the same "not derived from the command branches" gap `help` does, and the
+same fix for the same two cases:
+
+- A new **top-level command** needs nothing extra — `suggest` reads
+  `Object.keys(commands)` once (`topLevelNames`), so it's suggestible the
+  moment it's added to the `commands` object in step 1 above.
+- A new **rampable param** (step 2) needs nothing extra either —
+  `resolveKeywordsFor` reads the target object's own `params` map directly.
+- A new **non-rampable field on channel commands** (step 3, like `add_event`/
+  `synth=`) needs a manual addition to `commands.js`'s
+  `CHANNEL_ACTION_KEYWORDS` (or `PARAM_OBJECT_ACTION_KEYWORDS` for a
+  processor/modulator-level equivalent) — the same list `channelHelp`/
+  `paramObjectHelp` don't actually share with (each has its own
+  hand-maintained keyword source; see `commands.js`'s comment above
+  `CHANNEL_ACTION_KEYWORDS` for why keeping those as prose-vs-bare-keyword
+  lists wasn't worth forcibly unifying).
+
 ## Command-name dispatch
 
-`executeCommand(text)` (the function `createCommandRouter` returns) resolves a
+`executeCommand(text)` (part of the object `createCommandRouter` returns —
+see [Keeping suggestions in sync](#keeping-suggestions-in-sync) above for the
+other one, `suggest`) resolves a
 command name in this order: `commands` (top-level) → `master` → `nllc.tracks`
 (by `.name`) → `nllc.buses` (by `.name`) → `nllc.processors` (by `.name`) →
 `nllc.modulators` (by `.name`) → `unknown command`. A bus is dispatched
@@ -104,7 +142,7 @@ doesn't fit the usual "addressed by its own name" shape.
 
 ## Multiple commands per submitted line
 
-`executeCommand(text)` (returned by `createCommandRouter`) first calls
+`executeCommand(text)` (one of the two values `createCommandRouter` returns) first calls
 `splitCommands(text)`, which finds every `/name` occurrence in the submitted
 line and dispatches each segment independently through the normal path,
 joining their results with newlines. This is what lets

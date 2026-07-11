@@ -12,7 +12,7 @@
     import ModulatorStrip from "./ModulatorStrip.svelte";
     import PatchList from "./PatchList.svelte";
 
-    let { nllc, tracks = [], buses = [], modulators = [], patches = [] } = $props();
+    let { nllc, tracks = [], buses = [], modulators = [], patches = [], onInsert = () => {} } = $props();
 </script>
 
 <div class="mixer">
@@ -25,7 +25,7 @@
         {:else}
             <div class="strips">
                 {#each tracks as track (track)}
-                    <MixerChannel label={track.name} audioContext={nllc.audioContext} channel={track} />
+                    <MixerChannel label={track.name} audioContext={nllc.audioContext} channel={track} onRemove={(t) => nllc.removeTrack(t)} {onInsert} />
                 {/each}
             </div>
         {/if}
@@ -38,14 +38,15 @@
         {:else}
             <div class="strips">
                 {#each buses as bus (bus)}
-                    <MixerChannel label={bus.name} audioContext={nllc.audioContext} channel={bus} />
+                    <MixerChannel label={bus.name} audioContext={nllc.audioContext} channel={bus} onRemove={(b) => nllc.removeBus(b)} {onInsert} />
                 {/each}
             </div>
         {/if}
     </div>
 
     <div class="master-strip">
-        <MixerChannel label={nllc.master.name} audioContext={nllc.audioContext} channel={nllc.master} />
+        <div class="title">Master</div>
+        <MixerChannel label={nllc.master.name} audioContext={nllc.audioContext} channel={nllc.master} {onInsert} />
     </div>
 
     <div class="modulator-section">
@@ -55,7 +56,7 @@
         {:else}
             <div class="modulator-rail">
                 {#each modulators as modulator (modulator)}
-                    <ModulatorStrip {modulator} audioContext={nllc.audioContext} onRemove={(m) => nllc.removeModulator(m)} />
+                    <ModulatorStrip {modulator} audioContext={nllc.audioContext} onRemove={(m) => nllc.removeModulator(m)} {onInsert} />
                 {/each}
             </div>
         {/if}

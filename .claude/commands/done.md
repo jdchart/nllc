@@ -16,3 +16,5 @@ A breif overview of the current state of the project
 ## Known issues
 - bullet point list of known problems, bugs and issues
 ```
+
+Also, create a list of things that the user should check before the next session at `.claude/output/checklist.md`

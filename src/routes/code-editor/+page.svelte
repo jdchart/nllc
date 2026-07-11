@@ -14,6 +14,16 @@
     let modulators = $state([]);
     let patches = $state([]);
     let executeCommand = $state((text) => `unrecognized: "${text}" (engine not ready yet)`);
+    let suggest = $state(() => null);
+    let codeEditor;
+
+    // Passed down through Mixer to every clickable name/param label
+    // (MixerChannel, ModulatorStrip) so clicking one pastes it into the
+    // console at the current cursor position instead of the user having to
+    // type it out.
+    function insertIntoConsole(text) {
+        codeEditor?.insertAtCursor(text);
+    };
 
     let mixerVisible = $state(true);
     let mixerWidth = $state(360);
@@ -81,7 +91,7 @@
 
         nllc_instance = nllc;
         tracks = [...nllc.tracks];
-        executeCommand = createCommandRouter(nllc);
+        ({ executeCommand, suggest } = createCommandRouter(nllc));
 
         // nllc.tracks/buses/modulators/patches are plain (non-reactive) arrays
         // mutated by console commands (/add_track, /add_bus, /add_modulator,
@@ -132,7 +142,7 @@
 
 <div class="layout">
     <div class="console-pane">
-        <CodeEditor onCommand={executeCommand} />
+        <CodeEditor bind:this={codeEditor} onCommand={executeCommand} onSuggest={suggest} />
     </div>
 
     <div
@@ -155,7 +165,7 @@
     <div class="mixer-pane" class:resizing style="width: {mixerVisible ? mixerWidth : 44}px">
         {#if nllc_instance}
             {#if mixerVisible}
-                <Mixer nllc={nllc_instance} {tracks} {buses} {modulators} {patches} />
+                <Mixer nllc={nllc_instance} {tracks} {buses} {modulators} {patches} onInsert={insertIntoConsole} />
             {:else}
                 <CollapsedRail nllc={nllc_instance} />
             {/if}
