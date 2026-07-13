@@ -4,14 +4,21 @@
 // calls scheduleAutomationEvent() directly for these — there's no `trigger()`
 // step, since ramping an AudioParam is generic across every target.
 export class NLLCAutomationEvent {
-    constructor({ beat, duration, target, from, to, curve = "linear", once = false }) {
+    constructor({ beat, duration, target, from, to, curve = "linear", once = false, paramKey }) {
         this.beat = beat;
         this.duration = duration; // in beats
         this.target = target; // an AudioParam
-        this.from = from;
+        this.from = from; // raw AudioParam values (already encoded, e.g. gain taper applied)
         this.to = to;
         this.curve = curve; // "linear" | "exponential" | "target"
         this.once = once; // fire a single time ever, instead of every loop pass
+        // Which key in the owning unit's `params` map `target` came from —
+        // set by everything that creates one from a named param (the
+        // console's automate= command, session.js's rebuild) so listings can
+        // display it and session.js can serialize by name rather than by an
+        // unserializable AudioParam reference. Optional: an event built
+        // straight against a raw AudioParam in code just won't round-trip.
+        this.paramKey = paramKey;
         this._scheduled = false;
     };
 };
@@ -58,4 +65,28 @@ export function scheduleAutomationEvent(time, event, secondsPerBeat) {
 export function scheduleRamp(audioContext, param, from, to, durationSeconds, { startTime, curve = "linear" } = {}) {
     const time = startTime ?? audioContext.currentTime;
     applyRamp(param, time, time + durationSeconds, from, to, curve);
+};
+
+// Writes a value onto an AudioParam at a specific (possibly future) time
+// instead of assigning .value directly, so at=beat/at=cycle can defer a
+// plain (non-ramped) set the same way scheduleRamp defers a ramp's start.
+// Shared by commands.js's applyParams (console sets) and session.js's
+// applySnapshot (/recall's non-ramped, instant-change fields) — the one
+// place that knows how to do this, rather than two copies.
+export function setInstant(audioContext, param, value, startTime) {
+    const time = startTime ?? audioContext.currentTime;
+    param.cancelScheduledValues(time);
+    param.setValueAtTime(value, time);
+};
+
+// Runs `fn` at (approximately) absolute AudioContext time `time`. For work
+// that can't ride native AudioParam scheduling the way a ramp/instant set
+// can — structural graph changes (session.js's applySnapshot reconciling
+// create/remove/reorder) or a plain non-AudioParam number like
+// NLLCClock.loopLengthBeats (commands.js's /clock num_beats= at=) — this is
+// the same "step it on a timer" compromise NLLCClock.rampBpm already makes
+// for bpm, generalized to arbitrary deferred work.
+export function scheduleAt(audioContext, time, fn) {
+    const delayMs = Math.max(0, (time - audioContext.currentTime) * 1000);
+    setTimeout(fn, delayMs);
 };

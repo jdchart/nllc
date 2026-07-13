@@ -23,6 +23,15 @@ export class NLLCSynth {
         this.automation = [];
         this.params = {};
 
+        // Non-rampable runtime settings, the counterpart to `params`: each
+        // entry is { get(), set(value), choices? } for a value with no
+        // AudioParam behind it (a waveform name, a degree list). One
+        // declaration drives everything — console get/set (commands.js's
+        // applyOptions), help text, ghost-text completion (via `choices`),
+        // and session round-tripping (getOptions below derives from this
+        // map, so subclasses no longer override it).
+        this.options = {};
+
         // Whether the clock schedules this synth's events/automation at all
         // (a transport pause, toggled by /track_1 start|stop), not a param.
         this.active = true;
@@ -45,4 +54,15 @@ export class NLLCSynth {
     // buffer sources are one-shot, so they can't be pre-built and reused) and
     // connect them into `this.output`. Base implementation is a silent no-op.
     trigger(time, event, secondsPerBeat) {};
+
+    // Everything a subclass needs beyond `params` to fully reconstruct
+    // itself (e.g. NLLCOscSynth's waveform), derived from the `options` map
+    // above — the same keys are accepted back by the constructor, so
+    // session save/load round-trips without a per-class serializer. See
+    // session.js, which calls this when serializing a track's synth.
+    getOptions() {
+        const out = {};
+        for (const [key, option] of Object.entries(this.options)) out[key] = option.get();
+        return out;
+    };
 };

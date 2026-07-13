@@ -1,5 +1,8 @@
-import { scheduleRamp } from "./automation";
+import { scheduleRamp, setInstant, scheduleAt, NLLCAutomationEvent } from "./automation";
 import { NLLCEvent } from "./event";
+import { parseDegreeList } from "./harmony";
+import { RESERVED_NAMES } from "./nllc";
+import { snapshotSession, sessionToJSON, loadSession, applySnapshot } from "./session";
 
 // Coerces a raw parsed token into a number, boolean, or (quote-stripped)
 // string. Falls through to the raw string for anything else (e.g. a bare
@@ -21,6 +24,23 @@ function parseDuration(raw) {
     return { amount: Number(match[1]), unit: match[2] ? "beats" : "seconds" };
 };
 
+// Shared by pairPattern (a key's "=value") and POSITIONAL_VALUE_PATTERN (a
+// bare leading value with no key) below, so the two grammars can't drift.
+const QUOTED_OR_BARE_VALUE = `"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*'|\\S*`;
+const TRAILING_DURATION = `\\d+(?:\\.\\d+)?b?`;
+
+// A leading value with no "key=" prefix, e.g. the "1" in "/save 1" or the
+// "1 4b" in "/recall 1 4b at=cycle" — same value/duration shape a key's
+// "=value" gets, just anchored to the very start of argsText instead of
+// nested after "key=". Only opted into by commands whose one meaningful
+// param has no other bare-flag-shaped param to collide with (save/recall's
+// name=) — see parseCommand.
+const POSITIONAL_VALUE_PATTERN = new RegExp(`^(${QUOTED_OR_BARE_VALUE})(?:\\s+(${TRAILING_DURATION})(?=\\s|$))?`);
+
+// Commands where a bare leading token (no "key=") is shorthand for their one
+// meaningful param, so "/save 1" works as well as "/save name=1".
+const POSITIONAL_NAME_COMMANDS = new Set(["save", "recall"]);
+
 // Parses "/name" or "/name param=val param2=val2" into { name, params }.
 // Values are bare (no spaces) or quoted (may contain spaces): param="foo bar".
 // Whitespace around "=" is optional: "param = val" and "param =val" both work.
@@ -34,14 +54,33 @@ export function parseCommand(text) {
         throw new Error(`invalid command syntax: "${text}"`);
     }
 
-    const [, name, argsText] = match;
+    const [, name, argsTextRaw] = match;
     const params = {};
+    let argsText = argsTextRaw;
+
+    // A bare leading token with no "=" in it is otherwise indistinguishable
+    // from a boolean flag (see below) — only consumed as the positional
+    // value for commands that opted in, and only when it isn't itself a
+    // "key=value" pair (so "/save name=1" still parses normally).
+    if (argsText && POSITIONAL_NAME_COMMANDS.has(name)) {
+        const positional = argsText.match(POSITIONAL_VALUE_PATTERN);
+        if (positional && positional[1] && !positional[1].includes("=")) {
+            const [full, rawValue, rawDuration] = positional;
+            if (rawDuration !== undefined) {
+                const { amount, unit } = parseDuration(rawDuration);
+                params.name = { value: parseValue(rawValue), duration: amount, unit };
+            } else {
+                params.name = parseValue(rawValue);
+            }
+            argsText = argsText.slice(full.length);
+        }
+    }
 
     if (argsText) {
         // A bare token with no "=" (e.g. "help") is a boolean flag: params.help = true.
         // The duration group only applies inside an "=value" match (nested in
         // that group), so a bare flag can never swallow a following number.
-        const pairPattern = /([a-zA-Z_]\w*)(?:\s*=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\S*)(?:\s+(\d+(?:\.\d+)?b?)(?=\s|$))?)?/g;
+        const pairPattern = new RegExp(`([a-zA-Z_]\\w*)(?:\\s*=\\s*(${QUOTED_OR_BARE_VALUE})(?:\\s+(${TRAILING_DURATION})(?=\\s|$))?)?`, "g");
         let cursor = 0;
         let pair;
         while ((pair = pairPattern.exec(argsText))) {
@@ -51,6 +90,13 @@ export function parseCommand(text) {
             const [, key, rawValue, rawDuration] = pair;
             if (rawValue === undefined) {
                 params[key] = true;
+            } else if (rawValue === "") {
+                // "gain=" with nothing after it would otherwise parse to the
+                // empty string, which Number("") silently coerces to 0 —
+                // /track_1 gain= muting the track is a footgun, not a
+                // feature. An explicitly-quoted empty string ("" / '') still
+                // parses, since its raw token isn't empty.
+                throw new Error(`missing value for "${key}=" in /${name} ...`);
             } else if (rawDuration !== undefined) {
                 const { amount, unit } = parseDuration(rawDuration);
                 params[key] = { value: parseValue(rawValue), duration: amount, unit };
@@ -102,13 +148,44 @@ function toNumber(raw, label) {
     return num;
 };
 
-// Writes a value onto an AudioParam at a specific (possibly future) time
-// instead of assigning .value directly, so at=beat/at=cycle can defer a
-// plain (non-ramped) set the same way it already defers a ramp's start.
-function setInstant(audioContext, param, value, startTime) {
-    const time = startTime ?? audioContext.currentTime;
-    param.cancelScheduledValues(time);
-    param.setValueAtTime(value, time);
+// Triggers a browser download of `json` as a timestamped .json file — the
+// vehicle for /save_session (see docs/dev/architecture.md's "one NLLC
+// instance per page, created client-side": this module already only ever
+// runs in-browser, so reaching for `document`/Blob here is consistent with
+// that, not a new layering assumption).
+function downloadJSON(json, filenamePrefix) {
+    const blob = new Blob([JSON.stringify(json, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${filenamePrefix}-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+};
+
+// Opens a native file picker and resolves with the parsed JSON of whatever
+// file was chosen — the vehicle for /load_session. Resolves to null if the
+// picker is dismissed with no file chosen (never rejects for that case, only
+// for a read/parse failure once a file was actually picked).
+function pickJSONFile() {
+    return new Promise((resolve, reject) => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "application/json";
+        input.onchange = async () => {
+            const file = input.files?.[0];
+            if (!file) {
+                resolve(null);
+                return;
+            }
+            try {
+                resolve(JSON.parse(await file.text()));
+            } catch (error) {
+                reject(error);
+            }
+        };
+        input.click();
+    });
 };
 
 function formatValue(value) {
@@ -116,13 +193,21 @@ function formatValue(value) {
 };
 
 // "key=value (range min..max)" for a help listing — the range is omitted
-// when a param never declared bounds (e.g. NLLCReverb's wet, NLLCLFO's
-// freq, both currently unclamped; see NLLCParam's -Infinity/Infinity
-// defaults), since printing "-Infinity..Infinity" would just be noise.
+// when a param never declared bounds (e.g. a patch's depth, deliberately
+// unclamped; see NLLCParam's -Infinity/Infinity defaults), since printing
+// "-Infinity..Infinity" would just be noise.
 function formatParamLine(key, param) {
     const hasRange = Number.isFinite(param.min) || Number.isFinite(param.max);
     const range = hasRange ? ` (range ${param.min}..${param.max})` : "";
     return `  ${key}=${formatValue(param.get())}${range}`;
+};
+
+// The options counterpart to formatParamLine — a choices-carrying option
+// (waveform) lists them; anything else just notes it can't be ramped, the
+// one behavioral difference from a param a reader needs to know.
+function formatOptionLine(key, option) {
+    const note = option.choices ? ` (choices: ${option.choices.join(", ")})` : " (not rampable)";
+    return `  ${key}=${formatValue(option.get())}${note}`;
 };
 
 // The one place that knows how to get/set/ramp/defer a param (an NLLCParam —
@@ -169,6 +254,118 @@ function applyParams(nllc, paramsMap, input, { startTime, label }, { reportUnkno
     return results;
 };
 
+// The options counterpart to applyParams: applies every key of `input` that
+// names one of `object.options` (the declarative non-rampable settings a
+// synth/processor/modulator exposes — see NLLCSynth.options). Unlike a
+// param there's no ramp/defer path (nothing AudioParam-backed to schedule),
+// so a ramp spec or at= on an option is rejected per-key rather than
+// silently half-applied. `exclude` holds keys currently claimed by a
+// composite command in the same input (automate='s from/to/beat/duration,
+// add_event's fields) so e.g. /reverb automate=wet to=1 duration=2 ramps
+// wet over 2 beats rather than ALSO rebuilding the impulse response with a
+// 2-second duration. A `choices`-carrying option validates against that
+// list here, one place, rather than per-class.
+function applyOptions(object, input, exclude = new Set()) {
+    const results = [];
+    for (const [key, spec] of Object.entries(input)) {
+        if (exclude.has(key)) continue;
+        const option = object.options?.[key];
+        if (!option) continue;
+
+        if (isRamp(spec)) {
+            results.push(`${key} can't be ramped (not an audio param) — use ${key}=<value>`);
+            continue;
+        }
+        if (option.choices && !option.choices.includes(spec)) {
+            results.push(`invalid ${key} "${spec}" (expected ${option.choices.join(", ")})`);
+            continue;
+        }
+        try {
+            option.set(spec);
+            results.push(`${key}=${formatValue(option.get())}`);
+        } catch (error) {
+            results.push(error.message);
+        }
+    }
+    return results;
+};
+
+// The add_event/automate composite commands claim generic keys (beat=,
+// duration=, from=, to=, ...) that could otherwise collide with an object's
+// own option names (NLLCReverb's duration) — this is the exclusion set
+// applyOptions honors when one of those composites is present in the same
+// input.
+function compositeClaimedKeys(params) {
+    const claimed = new Set();
+    if (params.add_event) for (const key of ["beat", "pitch", "degree", "velocity", "duration"]) claimed.add(key);
+    if ("automate" in params) for (const key of ["from", "to", "beat", "duration", "curve", "once"]) claimed.add(key);
+    return claimed;
+};
+
+const AUTOMATION_CURVES = ["linear", "exponential", "target"];
+
+// Builds and attaches one NLLCAutomationEvent from an automate= command —
+// shared by channelCommand (gain/pan) and paramObjectCommand (any
+// processor/modulator param), the same way applyParams is. `beat`/`duration`
+// are in beats (loop-relative pattern position — this is the clock-driven,
+// repeating kind of automation, distinct from a one-off console ramp like
+// gain=0 3). from defaults to the param's current value; values are stored
+// encoded (raw AudioParam domain) since that's what the clock schedules.
+function addAutomationCommand(nllc, unit, paramsMap, params) {
+    const key = params.automate;
+    const param = paramsMap[key];
+    if (!param) return [`unknown param "${key}" to automate`];
+    if (!("to" in params)) return [`usage: automate=${key} to=<value> [from=] [beat=0] [duration=1] [curve=linear|exponential|target] [once]`];
+
+    const curve = params.curve ?? "linear";
+    if (!AUTOMATION_CURVES.includes(curve)) return [`invalid curve "${curve}" (expected ${AUTOMATION_CURVES.join(", ")})`];
+
+    const to = param.clamp(toNumber(params.to, "to"));
+    const from = params.from !== undefined ? param.clamp(toNumber(params.from, "from")) : param.get();
+    const beat = toNumber(params.beat ?? 0, "beat");
+    const duration = toNumber(params.duration ?? 1, "duration");
+    const once = params.once === true;
+
+    unit.addAutomation(new NLLCAutomationEvent({
+        beat,
+        duration,
+        target: param.audioParam,
+        from: param.encode(from),
+        to: param.encode(to),
+        curve,
+        once,
+        paramKey: key,
+    }));
+
+    const loopLength = nllc.clock.loopLengthBeats;
+    const beyondLoop = beat >= loopLength
+        ? ` (beat ${beat} is beyond the current ${loopLength}-beat loop — it won't fire unless num_beats is raised)`
+        : "";
+    return [`automation added: ${key} ${formatValue(from)} -> ${formatValue(to)} at beat ${beat} over ${duration}b (${curve}${once ? ", once" : ""})${beyondLoop}`];
+};
+
+// One line per automation event, with its index (the handle remove_automation
+// takes). from/to are decoded back through the named param so the listing
+// shows user-facing values (fader position, not raw tapered gain).
+function listAutomation(object, paramsMap) {
+    if (object.automation.length === 0) return "no automation";
+    return object.automation.map((event, i) => {
+        const param = event.paramKey ? paramsMap[event.paramKey] : null;
+        const from = param ? param.decode(event.from) : event.from;
+        const to = param ? param.decode(event.to) : event.to;
+        return `${i}: ${event.paramKey ?? "(raw param)"} ${formatValue(from)} -> ${formatValue(to)} beat=${event.beat} duration=${event.duration}b curve=${event.curve}${event.once ? " (once)" : ""}`;
+    }).join("\n");
+};
+
+function removeAutomationCommand(object, rawIndex) {
+    const index = toNumber(rawIndex, "remove_automation");
+    if (!Number.isInteger(index) || index < 0 || index >= object.automation.length) {
+        return `no automation event ${rawIndex} (see "automations" for the current list)`;
+    }
+    object.automation.splice(index, 1);
+    return `automation event ${index} removed`;
+};
+
 // Builds the one-line status string for a channel (master, a track, or a
 // bus), shown both for `/track_1` with no params and inside `/tracks`/`/buses`.
 function channelSummary(channel) {
@@ -201,17 +398,35 @@ function channelHelp(nllc, channel) {
         lines.push(formatParamLine(key, param));
     }
 
+    // A track's synth contributes its own params/options to this channel's
+    // command surface (routed by channelCommand the same way gain/pan are)
+    // — list them here so /track_1 help shows e.g. waveform without the
+    // user needing to know which object it technically lives on.
+    if (channel.source) {
+        const synthParams = Object.entries(channel.source.params);
+        const synthOptions = Object.entries(channel.source.options);
+        if (synthParams.length || synthOptions.length) {
+            lines.push("", `synth params/options (${channel.source.name}):`);
+            for (const [key, param] of synthParams) lines.push(formatParamLine(key, param));
+            for (const [key, option] of synthOptions) lines.push(formatOptionLine(key, option));
+        }
+    }
+
     lines.push("", "commands:");
     lines.push("  gain=<val> / pan=<val>          set instantly; add a trailing duration to ramp, e.g. gain=0 3 (3s) or gain=0 4b (4 beats)");
     lines.push("  at=beat|cycle                    defer a set/ramp above to the next beat/loop boundary instead of firing now");
     if (channel.source) {
         lines.push(`  synth=<type>                     swap this track's synth (${nllc.synthTypes.join(", ")})`);
-        lines.push("  add_event beat= pitch=|degree= velocity= duration=   append a note event (all optional except beat)");
+        lines.push("  add_event beat= pitch=|degree= velocity= duration=   append a note event (all fields optional; beat defaults to 0)");
+        lines.push("  events / remove_event=<n>        list this synth's events with indices / remove one by index");
         lines.push("  clear_events                     empty this synth's pattern");
         lines.push("  start / stop                     pause/resume this synth's transport (routing untouched)");
+        lines.push(`  (this synth can also receive generated notes alongside add_event: /patch source=<generator> dest=${channel.name}.notes)`);
     } else {
         lines.push("  (no synth here — add_event/clear_events/start/stop/synth= are no-ops on master/buses)");
     }
+    lines.push("  automate=<param> to= [from= beat= duration= curve= once]   add loop-position automation on gain/pan (beats, repeats every loop unless once)");
+    lines.push("  automations / remove_automation=<n> / clear_automation     list (with indices) / remove one / remove all");
     lines.push(`  add_processor=<type>             insert an effect at the end of the chain (${nllc.processorTypes.join(", ")})`);
     lines.push("  remove_processor=<id>            remove an insert by id");
     lines.push("  out=<name>                       replace every current send with a single one to <name>");
@@ -247,6 +462,21 @@ function channelHelp(nllc, channel) {
 // track's own synth (its events stop scheduling) without touching routing;
 // master and any bus have no synth, so start/stop/synth/add_event/
 // clear_events are no-ops there.
+// Every non-param key channelCommand itself consumes (beat/pitch/degree/
+// velocity/duration ride along with add_event; send_gain with add_send/
+// send). Anything typed that's neither here nor one of the channel's own
+// params is reported as unknown at the end of channelCommand — without
+// that, a typo'd key (/track_1 gian=0.5) would silently do nothing and
+// print the summary as if the command had been a plain query.
+const CHANNEL_COMMAND_KEYS = new Set([
+    "at", "out", "add_send", "send_gain", "remove_send", "send",
+    "add_event", "beat", "pitch", "degree", "velocity", "duration",
+    "events", "remove_event", "clear_events", "start", "stop", "synth",
+    "automate", "from", "to", "curve", "once",
+    "automations", "remove_automation", "clear_automation",
+    "add_processor", "remove_processor", "remove_self", "help",
+]);
+
 function channelCommand(nllc, channel, params) {
     if (params.help) return channelHelp(nllc, channel);
     if (Object.keys(params).length === 0) return channelSummary(channel);
@@ -267,13 +497,32 @@ function channelCommand(nllc, channel, params) {
     // synth=, ...) that aren't rampable params at all.
     results.push(...applyParams(nllc, channel.params, params, { startTime, label }, { reportUnknown: false }));
 
+    // A track's synth's own params and options are addressable straight off
+    // the track (/lead waveform=square) — the synth isn't an addressable
+    // object of its own, so its channel is where its surface lives. Channel
+    // params take precedence on a key collision (none exist today).
+    const claimed = compositeClaimedKeys(params);
+    if (channel.source) {
+        results.push(...applyParams(nllc, channel.source.params, params, { startTime, label }, { reportUnknown: false }));
+        results.push(...applyOptions(channel.source, params, claimed));
+    }
+
     if ("out" in params) {
-        const destObject = nllc._resolveObject(params.out);
-        if (!destObject || !destObject.input) {
-            results.push(`unknown or invalid destination "${params.out}"`);
+        // out= replaces EVERY send — on master that includes its one send to
+        // the actual speakers (audioContext.destination), which has no
+        // addressable name, so nothing typed at the console could ever wire
+        // it back. add_send= on master stays allowed (it doesn't disturb the
+        // speakers send), as does remove_send= of any non-speakers send.
+        if (channel === nllc.master) {
+            results.push("master's output is fixed to the speakers — out= is not available on master");
         } else {
-            channel.connect(destObject, params.out);
-            results.push(`routed to ${params.out} (replacing previous sends)`);
+            const destObject = nllc._resolveObject(params.out);
+            if (!destObject || !destObject.input) {
+                results.push(`unknown or invalid destination "${params.out}"`);
+            } else {
+                channel.connect(destObject, params.out);
+                results.push(`routed to ${params.out} (replacing previous sends)`);
+            }
         }
     }
 
@@ -289,10 +538,17 @@ function channelCommand(nllc, channel, params) {
     }
 
     if ("remove_send" in params) {
-        const removed = channel.removeSend(params.remove_send);
-        results.push(removed
-            ? `removed send ${params.remove_send}`
-            : `no send "${params.remove_send}" on ${channel.name}`);
+        const send = channel.sends.find((s) => s.id === params.remove_send);
+        // Same reasoning as the out= guard above: master's speakers send is
+        // the one edge the console could never recreate once severed.
+        if (send && send.destination === nllc.audioContext.destination) {
+            results.push("master's send to the speakers can't be removed");
+        } else {
+            const removed = channel.removeSend(params.remove_send);
+            results.push(removed
+                ? `removed send ${params.remove_send}`
+                : `no send "${params.remove_send}" on ${channel.name}`);
+        }
     }
 
     if ("send" in params) {
@@ -318,7 +574,41 @@ function channelCommand(nllc, channel, params) {
                 duration: params.duration !== undefined ? toNumber(params.duration, "duration") : undefined,
             });
             channel.source.addEvent(event);
-            results.push(`event added to ${channel.source.name} at beat ${event.beat}`);
+            // beat is loop-relative, so a beat at/past the current loop
+            // length never matches a scheduling window — legal (num_beats
+            // may grow later), but silent, so it deserves a heads-up.
+            const loopLength = nllc.clock.loopLengthBeats;
+            const beyondLoop = event.beat >= loopLength
+                ? ` (beat ${event.beat} is beyond the current ${loopLength}-beat loop — it won't sound unless num_beats is raised)`
+                : "";
+            results.push(`event added to ${channel.source.name} at beat ${event.beat}${beyondLoop}`);
+        }
+    }
+
+    if (params.events) {
+        if (!channel.source) {
+            results.push(`${channel.name} has no synth`);
+        } else if (channel.source.events.length === 0) {
+            results.push("no events");
+        } else {
+            results.push(channel.source.events.map((event, i) => {
+                const pitch = event.degree !== undefined ? `degree=${event.degree}` : `pitch=${event.pitch}`;
+                return `${i}: beat=${event.beat} ${pitch} velocity=${event.velocity} duration=${event.duration}`;
+            }).join("\n"));
+        }
+    }
+
+    if ("remove_event" in params) {
+        if (!channel.source) {
+            results.push(`${channel.name} has no synth`);
+        } else {
+            const index = toNumber(params.remove_event, "remove_event");
+            if (!Number.isInteger(index) || index < 0 || index >= channel.source.events.length) {
+                results.push(`no event ${params.remove_event} (see "events" for the current list)`);
+            } else {
+                channel.source.events.splice(index, 1);
+                results.push(`event ${index} removed`);
+            }
         }
     }
 
@@ -329,6 +619,19 @@ function channelCommand(nllc, channel, params) {
             channel.source.events = [];
             results.push(`${channel.source.name} events cleared`);
         }
+    }
+
+    // Loop-position automation on this channel's own gain/pan — see
+    // addAutomationCommand/listAutomation above; the same surface every
+    // processor/modulator gets via paramObjectCommand.
+    if ("automate" in params) {
+        results.push(...addAutomationCommand(nllc, channel, channel.params, params));
+    }
+    if (params.automations) results.push(listAutomation(channel, channel.params));
+    if ("remove_automation" in params) results.push(removeAutomationCommand(channel, params.remove_automation));
+    if (params.clear_automation) {
+        channel.automation = [];
+        results.push("automation cleared");
     }
 
     if (params.start) {
@@ -382,6 +685,18 @@ function channelCommand(nllc, channel, params) {
             : `no processor "${params.remove_processor}" on ${channel.name}`);
     }
 
+    // See CHANNEL_COMMAND_KEYS above — reportUnknown is off for the
+    // applyParams calls (each only knows one params map), so unrecognized
+    // keys are caught here instead of silently ignored. A key is known if
+    // any surface this command routes to claims it: the channel's params,
+    // its synth's params/options, or the command keywords themselves.
+    for (const key of Object.keys(params)) {
+        const knownOnSynth = channel.source && (key in channel.source.params || key in channel.source.options);
+        if (!(key in channel.params) && !knownOnSynth && !CHANNEL_COMMAND_KEYS.has(key)) {
+            results.push(`unknown param "${key}"`);
+        }
+    }
+
     return results.length ? results.join("; ") : channelSummary(channel);
 };
 
@@ -389,9 +704,10 @@ function channelCommand(nllc, channel, params) {
 // name (+ id, if it has one, e.g. a processor's "p1") and llm_summary, plus
 // every current param value.
 function paramObjectSummary(object) {
-    const paramList = Object.entries(object.params)
-        .map(([key, param]) => `${key}=${formatValue(param.get())}`)
-        .join(", ");
+    const paramList = [
+        ...Object.entries(object.params).map(([key, param]) => `${key}=${formatValue(param.get())}`),
+        ...Object.entries(object.options ?? {}).map(([key, option]) => `${key}=${formatValue(option.get())}`),
+    ].join(", ");
     const idSuffix = object.id ? ` (${object.id})` : "";
     return `${object.name}${idSuffix}: ${object.llm_summary} [${paramList}]`;
 };
@@ -406,24 +722,46 @@ function paramObjectHelp(nllc, object) {
         lines.push(formatParamLine(key, param));
     }
 
+    const options = Object.entries(object.options ?? {});
+    if (options.length) {
+        lines.push("", "options (settable, not rampable):");
+        for (const [key, option] of options) lines.push(formatOptionLine(key, option));
+    }
+
     lines.push("", "commands:");
     lines.push("  <param>=<val>                    set instantly; add a trailing duration to ramp, e.g. wet=0.5 3 (3s) or wet=0.5 4b (4 beats)");
     lines.push("  at=beat|cycle                    defer a set/ramp above to the next beat/loop boundary instead of firing now");
+    lines.push("  automate=<param> to= [from= beat= duration= curve= once]   add loop-position automation (beats, repeats every loop unless once)");
+    lines.push("  automations / remove_automation=<n> / clear_automation     list (with indices) / remove one / remove all");
     lines.push("  remove_self                      remove and delete this object");
-    lines.push(`  (this object's output can be a patch source: /patch source=${object.name} dest=<name.param>)`);
+    if (typeof object.generateEvents === "function") {
+        lines.push(`  (this modulator generates note events — feed a synth: /patch source=${object.name} dest=<track>.notes)`);
+    } else {
+        lines.push(`  (this object's output can be a patch source: /patch source=${object.name} dest=<name.param>)`);
+    }
     lines.push("  help                             show this text");
 
     return lines.join("\n");
 };
 
+// Every non-param/non-option key paramObjectCommand itself consumes — the
+// processor/modulator counterpart to CHANNEL_COMMAND_KEYS, and the same
+// "typos error instead of vanishing" contract.
+const PARAM_OBJECT_COMMAND_KEYS = new Set([
+    "at", "remove_self", "help",
+    "automate", "from", "to", "beat", "duration", "curve", "once",
+    "automations", "remove_automation", "clear_automation",
+]);
+
 // Shared by processorCommand and modulatorCommand: both are addressed by
 // their own name (e.g. /reverb wet=0.5, /lfo1 freq=3) and expose the same
-// generic surface — a `.params` map of NLLCParam (see param.js). This
-// function has no per-type knowledge of reverb/delay/lfo/etc.; every key in
-// `params` is expected to be one of `object`'s own params (reportUnknown
-// defaults to true), ramped/set/deferred by applyParams exactly the same way
-// a track's gain/pan is. `removeSelf` is the one bit that differs between
-// the two object kinds (nllc.removeProcessor vs. nllc.removeModulator).
+// generic surface — a `.params` map of NLLCParam (see param.js) plus an
+// `.options` map of non-rampable settings (see applyOptions above). This
+// function has no per-type knowledge of reverb/delay/lfo/etc.; params are
+// ramped/set/deferred by applyParams exactly the same way a track's
+// gain/pan is, options set via applyOptions, and the automate= family works
+// on any of the object's params. `removeSelf` is the one bit that differs
+// between the two object kinds (nllc.removeProcessor vs. nllc.removeModulator).
 function paramObjectCommand(nllc, object, params, removeSelf) {
     if (params.remove_self) {
         removeSelf();
@@ -435,7 +773,25 @@ function paramObjectCommand(nllc, object, params, removeSelf) {
 
     const { startTime, label, warning } = resolveStartTime(nllc.clock, params.at);
     const results = warning ? [warning] : [];
-    results.push(...applyParams(nllc, object.params, params, { startTime, label }));
+    results.push(...applyParams(nllc, object.params, params, { startTime, label }, { reportUnknown: false }));
+    results.push(...applyOptions(object, params, compositeClaimedKeys(params)));
+
+    if ("automate" in params) {
+        results.push(...addAutomationCommand(nllc, object, object.params, params));
+    }
+    if (params.automations) results.push(listAutomation(object, object.params));
+    if ("remove_automation" in params) results.push(removeAutomationCommand(object, params.remove_automation));
+    if (params.clear_automation) {
+        object.automation = [];
+        results.push("automation cleared");
+    }
+
+    for (const key of Object.keys(params)) {
+        if (!(key in object.params) && !(key in (object.options ?? {})) && !PARAM_OBJECT_COMMAND_KEYS.has(key)) {
+            results.push(`unknown param "${key}"`);
+        }
+    }
+
     return `${object.name}: ${results.join(", ")}`;
 };
 
@@ -452,9 +808,12 @@ function modulatorCommand(nllc, modulator, params) {
     return paramObjectCommand(nllc, modulator, params, () => nllc.removeModulator(modulator));
 };
 
-// One-line summary for /patches, e.g. "x1: lfo1 -> reverb.wet (depth 0.30)".
+// One-line summary for /patches, e.g. "x1: lfo1 -> reverb.wet (depth 0.30)" —
+// or, for an event patch (no depth — see NLLCEventPatch), "x2: rand1 ->
+// track_1.notes (generated notes)".
 function patchSummary(patch) {
-    return `${patch.id}: ${patch.sourceName} -> ${patch.destName} (depth ${patch.depth.value.toFixed(2)})`;
+    const detail = patch.params.depth ? `depth ${patch.depth.value.toFixed(2)}` : "generated notes";
+    return `${patch.id}: ${patch.sourceName} -> ${patch.destName} (${detail})`;
 };
 
 // Keywords channelCommand accepts beyond gain=/pan= (which come straight off
@@ -467,20 +826,55 @@ function patchSummary(patch) {
 // insertAtCursor/acceptSuggestion, which both understand the same "=" tail
 // convention).
 const CHANNEL_ACTION_KEYWORDS = [
-    "add_event", "clear_events", "start", "stop", "synth=", "add_processor=",
-    "remove_processor=", "out=", "add_send=", "remove_send=", "send=", "at=",
+    "add_event", "events", "remove_event=", "clear_events", "start", "stop",
+    "synth=", "add_processor=", "remove_processor=", "out=", "add_send=",
+    "remove_send=", "send=", "at=",
+    "automate=", "automations", "remove_automation=", "clear_automation",
     "remove_self", "help",
 ];
 
 // Same idea for processor/modulator commands beyond their own params.
-const PARAM_OBJECT_ACTION_KEYWORDS = ["at=", "remove_self", "help"];
+const PARAM_OBJECT_ACTION_KEYWORDS = [
+    "at=", "automate=", "automations", "remove_automation=",
+    "clear_automation", "remove_self", "help",
+];
 
 function channelKeywordsFor(channel) {
-    return [...Object.keys(channel.params).map((key) => `${key}=`), ...CHANNEL_ACTION_KEYWORDS];
+    return [
+        ...Object.keys(channel.params).map((key) => `${key}=`),
+        // A track's synth's params/options are addressable off the channel
+        // (see channelCommand), so they're suggestible there too.
+        ...Object.keys(channel.source?.params ?? {}).map((key) => `${key}=`),
+        ...Object.keys(channel.source?.options ?? {}).map((key) => `${key}=`),
+        ...CHANNEL_ACTION_KEYWORDS,
+    ];
 };
 
 function paramObjectKeywordsFor(object) {
-    return [...Object.keys(object.params).map((key) => `${key}=`), ...PARAM_OBJECT_ACTION_KEYWORDS];
+    return [
+        ...Object.keys(object.params).map((key) => `${key}=`),
+        ...Object.keys(object.options ?? {}).map((key) => `${key}=`),
+        ...PARAM_OBJECT_ACTION_KEYWORDS,
+    ];
+};
+
+// Every top-level command's own param keys (beyond a resolved channel's/
+// processor's/modulator's own params, which come from channelKeywordsFor/
+// paramObjectKeywordsFor above) — the other half of what resolveKeywordsFor
+// needs to cover every command, not just addressable objects. A command with
+// no params of its own (start, tracks, save_session, ...) just isn't listed;
+// resolveKeywordsFor falls back to [] for any recognized top-level name.
+const TOP_LEVEL_KEYWORDS = {
+    add_track: ["name=", "synth=", "out="],
+    add_bus: ["name=", "out="],
+    clock: ["bpm=", "num_beats=", "at="],
+    harmony: ["root=", "scale="],
+    add_modulator: ["type=", "name="],
+    patch: ["source=", "dest=", "depth=", "id=", "at="],
+    unpatch: ["id="],
+    save: ["name="],
+    recall: ["name=", "at="],
+    remove_state: ["name="],
 };
 
 // Every name addressable as `/name`, for completing the command/object-name
@@ -491,20 +885,39 @@ function paramObjectKeywordsFor(object) {
 // without it, typing "/trac" would suggest the built-in `/tracks` (a valid
 // prefix match) ahead of an actual track named "track_1".
 function addressableNames(nllc, topLevelNames) {
+    return [...objectNames(nllc), ...topLevelNames];
+};
+
+// Just the "things with a name" half of addressableNames — no top-level
+// commands — for completing a value that names an object (out=/add_send=/
+// source=/dest=), where a command name would never be valid.
+function objectNames(nllc) {
     return [
         "master",
         ...nllc.tracks.map((t) => t.name),
         ...nllc.buses.map((b) => b.name),
         ...nllc.processors.map((p) => p.name),
         ...nllc.modulators.map((m) => m.name),
-        ...topLevelNames,
     ];
 };
 
-// Resolves a already-typed command name to the keyword list valid after it —
-// null for a top-level command (add_track=/clock=/etc.'s own params aren't
-// covered by suggestions yet, only channel/processor/modulator param+command
-// keys) or an unrecognized name.
+// Resolves an already-typed name to whichever channel or processor/modulator
+// it addresses (or null) — the one lookup both resolveKeywordsFor and
+// resolveValueCandidates need, so they can't drift on how "master"/tracks/
+// buses/processors/modulators are found.
+function resolveObjectFor(nllc, name) {
+    if (name === "master") return nllc.master;
+    return nllc.tracks.find((t) => t.name === name)
+        ?? nllc.buses.find((b) => b.name === name)
+        ?? nllc.processors.find((p) => p.name === name)
+        ?? nllc.modulators.find((m) => m.name === name)
+        ?? null;
+};
+
+// Resolves an already-typed command name to the keyword list valid after it —
+// null both for an unrecognized name and for a recognized top-level command
+// with no params of its own (start, tracks, save_session, ...): either way
+// there's nothing to suggest.
 function resolveKeywordsFor(nllc, name) {
     if (name === "master") return channelKeywordsFor(nllc.master);
 
@@ -513,6 +926,41 @@ function resolveKeywordsFor(nllc, name) {
 
     const paramObject = nllc.processors.find((p) => p.name === name) ?? nllc.modulators.find((m) => m.name === name);
     if (paramObject) return paramObjectKeywordsFor(paramObject);
+
+    if (name in TOP_LEVEL_KEYWORDS) return TOP_LEVEL_KEYWORDS[name];
+    return null;
+};
+
+// Known value candidates for a "key=" whose domain is small/enumerable (a
+// registered type name, "beat"/"cycle", an existing id/name) rather than
+// open-ended (a number, an arbitrary user-chosen name) — null means "no
+// known candidates," which leaves the value untouched rather than guessing.
+// `resolvedObject` is whatever resolveObjectFor found for the command/object
+// name the key is being typed on (e.g. the channel for a "remove_processor="
+// being typed on /track_1), so id-shaped values can be scoped to it.
+function resolveValueCandidates(nllc, commandName, resolvedObject, key) {
+    if (key === "at") return ["beat", "cycle"];
+    if (key === "synth") return nllc.synthTypes;
+    if (key === "add_processor") return nllc.processorTypes;
+    if (key === "type" && commandName === "add_modulator") return nllc.modulatorTypes;
+    if (key === "name" && (commandName === "recall" || commandName === "remove_state")) return Object.keys(nllc.states);
+    if (key === "id" && (commandName === "patch" || commandName === "unpatch")) return nllc.patches.map((p) => p.id);
+    if (key === "out" || key === "add_send" || key === "source" || key === "dest") return objectNames(nllc);
+    if (key === "remove_processor" && resolvedObject?.processors) return resolvedObject.processors.map((p) => p.id);
+    if ((key === "remove_send" || key === "send") && resolvedObject?.sends) return resolvedObject.sends.map((s) => s.id);
+    if (key === "curve") return AUTOMATION_CURVES;
+    if (key === "automate" && resolvedObject?.params) return Object.keys(resolvedObject.params);
+    if (key === "remove_event" && resolvedObject?.source) return resolvedObject.source.events.map((_, i) => String(i));
+    if (key === "remove_automation" && resolvedObject?.automation) return resolvedObject.automation.map((_, i) => String(i));
+
+    // An option with a declared `choices` list (a synth/lfo waveform)
+    // completes from it — whether the option lives on the resolved object
+    // itself (a processor/modulator) or on its synth (a track, whose
+    // channelCommand routes synth options — see channelKeywordsFor).
+    const optionOwner = resolvedObject?.options?.[key]
+        ? resolvedObject
+        : resolvedObject?.source?.options?.[key] ? resolvedObject.source : null;
+    if (optionOwner) return optionOwner.options[key].choices ?? null;
 
     return null;
 };
@@ -524,46 +972,79 @@ function pickBestMatch(candidates, partial) {
     return candidates.find((candidate) => candidate !== partial && candidate.startsWith(partial)) ?? null;
 };
 
+// True when `cursorPos` sits at the boundary of a token (nothing/whitespace/
+// the start of the next "/command" immediately follows) rather than inside
+// one — completion only ever extends the token ending exactly at the cursor,
+// never inserts into the middle of one already-typed further.
+function isTokenBoundary(input, cursorPos) {
+    const ch = input[cursorPos];
+    return ch === undefined || ch === " " || ch === "/";
+};
+
 // Ghost-text completion for the console (CodeEditor.svelte): given the full
-// input text and the cursor position, returns { start, full } (the absolute
-// index the current token starts at, and the complete candidate string it
-// could complete to) or null if there's nothing to suggest. Deliberately
-// restricted to the cursor sitting at the very end of the input — mid-line
-// completion would need the ghost text to render inside the typed text
-// rather than after it, which the simple typed-prefix-is-invisible overlay
-// technique in CodeEditor.svelte can't do.
+// input text and the cursor position, returns { start, end, full } — the
+// span of the current token (`start` to `end`, both absolute indices into
+// `input`; `end` always equals `cursorPos`, since completion only fires at a
+// token boundary — see isTokenBoundary) and the complete candidate string it
+// could complete to — or null if there's nothing to suggest. Works with the
+// cursor anywhere in the input, not just at the very end (CodeEditor.svelte
+// composites the whole line through the ghost overlay, so an insertion
+// anywhere pushes later text over correctly).
 //
-// Only completes two token positions: the /name itself (any top-level
-// command or addressable object), and — once past the name — a bare param
-// *key* for a resolved channel/processor/modulator (not a value; a token
-// already containing "=" is mid-value and isn't completed here).
+// Completes three token shapes: the /name itself (any top-level command or
+// addressable object); once past the name, a bare param *key* for whatever
+// the name resolves to (a channel/processor/modulator's own params, or a
+// top-level command's — see resolveKeywordsFor); or, once a key's "=" has
+// been typed, its *value* — but only for keys with a known, enumerable
+// candidate list (see resolveValueCandidates); an open-ended value (a
+// number, a freshly-chosen name) is left alone.
 function suggestCompletion(nllc, topLevelNames, input, cursorPos) {
-    if (cursorPos !== input.length) return null;
+    if (!isTokenBoundary(input, cursorPos)) return null;
 
     const lastSlash = input.lastIndexOf("/", cursorPos - 1);
     if (lastSlash === -1) return null;
 
-    const typed = input.slice(lastSlash); // e.g. "/track_1 ga"
+    const typed = input.slice(lastSlash, cursorPos); // e.g. "/track_1 ga"
     const firstSpace = typed.indexOf(" ");
 
     if (firstSpace === -1) {
         const partial = typed.slice(1);
         if (!partial) return null;
         const match = pickBestMatch(addressableNames(nllc, topLevelNames), partial);
-        return match ? { start: lastSlash + 1, full: match } : null;
+        return match ? { start: lastSlash + 1, end: cursorPos, full: match } : null;
     }
 
     const name = typed.slice(1, firstSpace);
     const paramsText = typed.slice(firstSpace + 1);
     const lastSpaceInParams = paramsText.lastIndexOf(" ");
     const currentToken = lastSpaceInParams === -1 ? paramsText : paramsText.slice(lastSpaceInParams + 1);
-    if (!currentToken || currentToken.includes("=")) return null;
+    if (!currentToken) return null;
+
+    const tokenStart = cursorPos - currentToken.length;
+    const eqIndex = currentToken.indexOf("=");
+
+    if (eqIndex !== -1) {
+        const key = currentToken.slice(0, eqIndex);
+        const valuePartial = currentToken.slice(eqIndex + 1);
+        // Same "nothing typed yet" guard the /name-token and bare-key
+        // branches above already have (see the `!partial`/`!currentToken`
+        // checks) — without it, an empty value (just typed "type=") would
+        // "complete" to the *first* candidate (e.g. "lfo") and, on Enter,
+        // silently submit and create that instead of whatever the user meant
+        // to type next. Requiring at least one typed character narrows
+        // multiple candidates unambiguously before anything is suggested.
+        if (!valuePartial) return null;
+        const candidates = resolveValueCandidates(nllc, name, resolveObjectFor(nllc, name), key);
+        if (!candidates) return null;
+        const match = pickBestMatch(candidates, valuePartial);
+        return match ? { start: tokenStart, end: cursorPos, full: `${key}=${match}` } : null;
+    }
 
     const keywords = resolveKeywordsFor(nllc, name);
     if (!keywords) return null;
 
     const match = pickBestMatch(keywords, currentToken);
-    return match ? { start: cursorPos - currentToken.length, full: match } : null;
+    return match ? { start: tokenStart, end: cursorPos, full: match } : null;
 };
 
 // Builds the single executeCommand(text) function the UI calls for every
@@ -624,8 +1105,18 @@ export function createCommandRouter(nllc) {
                     nllc.clock.rampBpm(target, seconds, { startTime });
                     results.push(`bpm ramping to ${target} over ${seconds.toFixed(2)}s${label ? ` (${label})` : ""}`);
                 } else {
-                    nllc.clock.setBpm(toNumber(spec, "bpm"));
-                    results.push(`bpm set to ${nllc.clock.bpm}`);
+                    const target = toNumber(spec, "bpm");
+                    if (startTime !== undefined) {
+                        // bpm isn't a native AudioParam, so a deferred plain
+                        // set rides rampBpm with a zero-length ramp — the
+                        // same "step it on a timer until startTime, then
+                        // apply" mechanism, not a duplicate of it.
+                        nllc.clock.rampBpm(target, 0, { startTime });
+                        results.push(`bpm set to ${target} (${label})`);
+                    } else {
+                        nllc.clock.setBpm(target);
+                        results.push(`bpm set to ${nllc.clock.bpm}`);
+                    }
                 }
             }
 
@@ -634,11 +1125,46 @@ export function createCommandRouter(nllc) {
                 if (isRamp(spec)) {
                     results.push(`num_beats can't be ramped — use num_beats=<number>`);
                 } else {
-                    nllc.clock.setLoopLengthBeats(toNumber(spec, "num_beats"));
-                    results.push(`num_beats set to ${nllc.clock.loopLengthBeats}`);
+                    const target = toNumber(spec, "num_beats");
+                    if (startTime !== undefined) {
+                        scheduleAt(nllc.audioContext, startTime, () => nllc.clock.setLoopLengthBeats(target));
+                        results.push(`num_beats set to ${target} (${label})`);
+                    } else {
+                        nllc.clock.setLoopLengthBeats(target);
+                        results.push(`num_beats set to ${nllc.clock.loopLengthBeats}`);
+                    }
                 }
             }
 
+            return results.join("; ");
+        },
+        // The shared harmony context every synth resolves NLLCEvent.degree
+        // against, mutated in place (never replaced — synths hold a
+        // reference; see harmony.js). Because degrees resolve at *trigger*
+        // time, changing root/scale retunes already-playing degree-authored
+        // patterns (and randomnotes streams) live, mid-loop.
+        harmony: (params) => {
+            if (!("root" in params) && !("scale" in params)) {
+                return `root=${nllc.harmony.root} scale=${nllc.harmony.scale.join(",")}`;
+            }
+
+            const results = [];
+            if ("root" in params) {
+                if (isRamp(params.root)) {
+                    results.push("root can't be ramped — use root=<midi note>");
+                } else {
+                    nllc.harmony.root = toNumber(params.root, "root");
+                    results.push(`root=${nllc.harmony.root}`);
+                }
+            }
+            if ("scale" in params) {
+                if (isRamp(params.scale)) {
+                    results.push("scale can't be ramped — use scale=<comma-separated degrees>");
+                } else {
+                    nllc.harmony.scale = parseDegreeList(params.scale);
+                    results.push(`scale=${nllc.harmony.scale.join(",")}`);
+                }
+            }
             return results.join("; ");
         },
         add_modulator: (params) => {
@@ -663,6 +1189,7 @@ export function createCommandRouter(nllc) {
                 const patchObj = nllc.patches.find((p) => p.id === params.id);
                 if (!patchObj) return `no patch "${params.id}"`;
                 if (!("depth" in params)) return patchSummary(patchObj);
+                if (!patchObj.params.depth) return `${patchObj.id} is an event patch (-> .notes) — no depth to adjust`;
 
                 const { id: _id, ...depthParams } = params;
                 const { startTime, label, warning } = resolveStartTime(nllc.clock, depthParams.at);
@@ -672,12 +1199,12 @@ export function createCommandRouter(nllc) {
             }
 
             if (!("source" in params) || !("dest" in params)) {
-                return `usage: /patch source=<name> dest=<name.param> depth=<0-1> (default 1); adjust later with /patch id=<id> depth=...`;
+                return `usage: /patch source=<name> dest=<name.param> depth=<0-1> (default 1); adjust later with /patch id=<id> depth=...; or dest=<track>.notes to feed an event-generating modulator's notes into a synth (no depth)`;
             }
 
             const depth = toNumber(params.depth ?? 1, "depth");
             const patchObj = nllc.createPatch({ sourceName: params.source, destName: params.dest, depth });
-            return `patched ${patchObj.sourceName} -> ${patchObj.destName} (depth ${patchObj.depth.value.toFixed(2)}) [${patchObj.id}]`;
+            return `patched ${patchSummary(patchObj)}`;
         },
         unpatch: (params) => {
             if (!("id" in params)) return `usage: /unpatch id=<id>`;
@@ -690,18 +1217,110 @@ export function createCommandRouter(nllc) {
             if (nllc.patches.length === 0) return "no patches";
             return nllc.patches.map(patchSummary).join("\n");
         },
+        // Captures everything live (clock/harmony/master/buses/tracks/
+        // modulators/patches — see session.js's snapshotSession) under a
+        // name, held in memory on nllc.states. Also persisted as part of a
+        // whole-session file (see save_session below), so a saved session's
+        // states survive a save/load round trip. A bare leading token is
+        // shorthand for name= (see POSITIONAL_NAME_COMMANDS in
+        // parseCommand): "/save 1" and "/save name=1" are equivalent.
+        save: (params) => {
+            if (!("name" in params)) return `usage: /save <state> (or name=<state>)`;
+            nllc.states[params.name] = snapshotSession(nllc);
+            return `saved state "${params.name}"`;
+        },
+        // Reconciles the live session toward a saved state without a hard
+        // cut — matching objects ramp in place, appearing/disappearing ones
+        // fade in/out (see session.js's applySnapshot) — rather than
+        // tearing everything down and rebuilding. A bare leading token is
+        // shorthand for name= (see POSITIONAL_NAME_COMMANDS in
+        // parseCommand): "/recall 1" and "/recall name=1" are equivalent, as
+        // are "/recall 1 4b" and "/recall name=1 4b". A trailing duration
+        // ramps the change over that long, e.g. /recall 1 3 (3s) or
+        // /recall 1 4b (4 beats); with none, every change is still deferred
+        // to at=beat|cycle if given, just as an instant jump rather than a
+        // ramp — same convention as any other param.
+        recall: (params) => {
+            if (!("name" in params)) return `usage: /recall <state> [<duration>] [at=beat|cycle] (or name=<state>)`;
+
+            const spec = params.name;
+            const stateName = isRamp(spec) ? spec.value : spec;
+            const durationSeconds = isRamp(spec) ? rampSeconds(nllc.clock, spec) : 0;
+
+            const snapshot = nllc.states[stateName];
+            if (!snapshot) return `no saved state "${stateName}"`;
+
+            const { startTime, label, warning } = resolveStartTime(nllc.clock, params.at);
+            applySnapshot(nllc, snapshot, { startTime, durationSeconds });
+
+            const rampNote = durationSeconds > 0 ? ` over ${durationSeconds.toFixed(2)}s` : "";
+            return `${warning ? `${warning}; ` : ""}recalling "${stateName}"${rampNote}${label ? ` (${label})` : ""}`;
+        },
+        remove_state: (params) => {
+            if (!("name" in params)) return `usage: /remove_state name=<state>`;
+            if (!(params.name in nllc.states)) return `no saved state "${params.name}"`;
+            delete nllc.states[params.name];
+            return `removed state "${params.name}"`;
+        },
+        states: () => {
+            const names = Object.keys(nllc.states);
+            return names.length ? names.join(", ") : "no saved states";
+        },
+        // Downloads the whole live session (including every /save'd state)
+        // as a JSON file — see session.js's sessionToJSON. /save_json is the
+        // exact same command under an alternate, more literal name (also
+        // what the Transport bar's Save button — see Transport.svelte —
+        // runs) — both point at the one handler below rather than two copies.
+        save_session: () => saveSessionHandler(),
+        save_json: () => saveSessionHandler(),
+        // Opens a file picker and hard-rebuilds the session from whatever
+        // .json is chosen (see session.js's loadSession) — async, unlike
+        // every other command, since reading the picked file can't resolve
+        // synchronously; CodeEditor.svelte already awaits onCommand's result.
+        // /load_json is the same alias relationship as /save_json above.
+        load_session: () => loadSessionHandler(),
+        load_json: () => loadSessionHandler(),
+    };
+
+    function saveSessionHandler() {
+        downloadJSON(sessionToJSON(nllc), "nllc-session");
+        return "session downloaded";
+    };
+
+    async function loadSessionHandler() {
+        const json = await pickJSONFile();
+        if (!json) return "load cancelled";
+        loadSession(nllc, json);
+        return "session loaded";
     };
 
     // Computed once (not per suggest() call) since `commands`'s own keys
     // never change after this router is built.
     const topLevelNames = Object.keys(commands);
 
+    // RESERVED_NAMES (nllc.js) is what stops an object being created with a
+    // name this router would dispatch as a command first — the two lists
+    // live in different modules, so verify they haven't drifted whenever a
+    // router is built (once per page) rather than trusting it silently.
+    for (const name of topLevelNames) {
+        if (!RESERVED_NAMES.has(name)) {
+            console.warn(`NLLC: top-level command "${name}" is missing from RESERVED_NAMES (nllc.js) — an object could be created with that name and shadow it`);
+        }
+    }
+
     // Wraps a handler so a thrown error becomes a console-printable string
     // instead of crashing the session — handlers don't need their own
-    // try/catch.
+    // try/catch. A handler (e.g. load_session) may return a Promise instead
+    // of a string directly — CodeEditor.svelte already awaits executeOne's
+    // result, so that promise passes through unchanged, but a *rejection*
+    // still needs converting to the same clean error string a sync throw
+    // gets, hence the .catch here alongside the sync try/catch.
     function run(name, handler, params) {
         try {
-            return handler(params) ?? "";
+            const result = handler(params) ?? "";
+            return result instanceof Promise
+                ? result.catch((error) => `error running /${name}: ${error.message}`)
+                : result;
         } catch (error) {
             return `error running /${name}: ${error.message}`;
         }
@@ -757,10 +1376,21 @@ export function createCommandRouter(nllc) {
     };
 
     // The single entry point the UI calls for every console submission.
+    // Every built-in command is synchronous except load_session (see run()
+    // above) — segments.map(executeOne) is a plain string array the vast
+    // majority of the time, joined immediately; only when a segment actually
+    // came back as a Promise does this itself return one (CodeEditor.svelte
+    // already awaits executeCommand's result either way), instead of always
+    // paying an extra microtask for the common all-sync case.
     function executeCommand(text) {
         const segments = splitCommands(text);
         if (segments.length === 0) return `unrecognized: "${text}" (commands must start with /)`;
-        return segments.map(executeOne).join("\n");
+
+        const results = segments.map(executeOne);
+        if (results.some((result) => result instanceof Promise)) {
+            return Promise.all(results).then((resolved) => resolved.join("\n"));
+        }
+        return results.join("\n");
     };
 
     // Ghost-text completion for CodeEditor.svelte — see suggestCompletion.

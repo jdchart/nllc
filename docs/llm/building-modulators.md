@@ -47,6 +47,26 @@ depth=0.3` (patching only needs `.output`, so any modulator qualifies as a
 source automatically). Removing the modulator cascade-removes any patch that
 references it.
 
-Not built yet, don't invent it speculatively: a modulator/patch that
-generates discrete events (notes/triggers) rather than a continuous signal —
-that would need an "event input" concept on `NLLCSynth` that doesn't exist.
+For a runtime setting that isn't a param (like `NLLCLFO`'s `waveform`, or
+`NLLCRandomNotes`' `scale`), declare it in `this.options` — `{ key: {
+get(), set(value), choices? } }`. One declaration makes it console-settable
+(`/mod1 waveform=square`, validated against `choices`; ramp specs
+rejected), lists it in `help`, and round-trips it through
+`/save_session`/`/recall` — the base `getOptions()` derives from the map,
+so don't override it. See `modulators/lfo.js`/`randomnotes.js` for the two
+real examples.
+
+A modulator can instead generate discrete events (notes) rather than a
+continuous signal — see `modulators/randomnotes.js` (`NLLCRandomNotes`) for
+the pattern: expose `generateEvents(fromBeat, toBeat)` (called by
+`NLLCClock` every tick with an absolute, non-loop-relative beat range — see
+clock.js) returning whatever `NLLCEvent`s should fire, and initialize
+`this.eventDestinations = []`. If the generator keeps absolute-beat state
+(a "next candidate beat" cursor etc.), also implement `onClockStart()`
+(duck-typed, called by `NLLCClock.start()`) to reset it — a clock (re)start
+rewinds absolute beats to 0. Such a modulator has no meaningful continuous
+`.output`; instead it's patched into a track's synth via `/patch
+source=<generator> dest=<track>.notes` (the reserved `.notes` destination —
+see `nllc.js`'s `createPatch`/`_createEventPatch` and `patch.js`'s
+`NLLCEventPatch`), which is bookkeeping-only (no AudioParam, no `depth`) and
+lives alongside — never replaces — a synth's manually-authored `events`.

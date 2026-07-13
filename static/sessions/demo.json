@@ -1,0 +1,609 @@
+{
+  "version": 1,
+  "clock": {
+    "bpm": 120,
+    "loopLengthBeats": 4
+  },
+  "harmony": {
+    "root": 60,
+    "scale": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "master": {
+    "params": {
+      "gain": 1,
+      "pan": 0
+    },
+    "processors": []
+  },
+  "buses": [
+    {
+      "name": "fx",
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "processors": [
+        {
+          "type": "reverb",
+          "name": "reverb",
+          "active": true,
+          "options": {
+            "duration": 2.5,
+            "decay": 3
+          },
+          "params": {
+            "wet": 0.4000000059604645
+          }
+        }
+      ],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "lead",
+      "active": true,
+      "params": {
+        "gain": 0.749999999231994,
+        "pan": 0
+      },
+      "processors": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "fx",
+          "gain": 0.30000001192092896
+        }
+      ],
+      "synth": {
+        "type": "oscsynth",
+        "options": {
+          "waveform": "triangle"
+        },
+        "params": {},
+        "events": [
+          {
+            "beat": 0,
+            "pitch": 48,
+            "velocity": 0.5,
+            "duration": 0.5
+          },
+          {
+            "beat": 1,
+            "pitch": 50,
+            "velocity": 0.5,
+            "duration": 0.5
+          },
+          {
+            "beat": 2,
+            "pitch": 52,
+            "velocity": 0.5,
+            "duration": 0.5
+          },
+          {
+            "beat": 3,
+            "pitch": 55,
+            "velocity": 0.5,
+            "duration": 0.5
+          }
+        ]
+      }
+    },
+    {
+      "name": "drums",
+      "active": true,
+      "params": {
+        "gain": 0.7999999931550191,
+        "pan": 0
+      },
+      "processors": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ],
+      "synth": {
+        "type": "sampler",
+        "options": {},
+        "params": {},
+        "events": [
+          {
+            "beat": 0,
+            "pitch": 0,
+            "velocity": 0.9,
+            "duration": 0.2
+          },
+          {
+            "beat": 0.5,
+            "pitch": 4,
+            "velocity": 0.4,
+            "duration": 0.2
+          },
+          {
+            "beat": 1,
+            "pitch": 2,
+            "velocity": 0.8,
+            "duration": 0.2
+          },
+          {
+            "beat": 1.5,
+            "pitch": 4,
+            "velocity": 0.4,
+            "duration": 0.2
+          },
+          {
+            "beat": 2,
+            "pitch": 0,
+            "velocity": 0.9,
+            "duration": 0.2
+          },
+          {
+            "beat": 2.5,
+            "pitch": 4,
+            "velocity": 0.4,
+            "duration": 0.2
+          },
+          {
+            "beat": 3,
+            "pitch": 2,
+            "velocity": 0.8,
+            "duration": 0.2
+          },
+          {
+            "beat": 3.5,
+            "pitch": 4,
+            "velocity": 0.4,
+            "duration": 0.2
+          }
+        ]
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "lfo",
+      "name": "wobble",
+      "options": {
+        "waveform": "sine"
+      },
+      "params": {
+        "freq": 0.25
+      }
+    }
+  ],
+  "patches": [
+    {
+      "sourceName": "wobble",
+      "destName": "reverb.wet",
+      "depth": 0.15000000596046448
+    }
+  ],
+  "states": {
+    "full": {
+      "clock": {
+        "bpm": 120,
+        "loopLengthBeats": 4
+      },
+      "harmony": {
+        "root": 60,
+        "scale": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ]
+      },
+      "master": {
+        "params": {
+          "gain": 1,
+          "pan": 0
+        },
+        "processors": []
+      },
+      "buses": [
+        {
+          "name": "fx",
+          "params": {
+            "gain": 1,
+            "pan": 0
+          },
+          "processors": [
+            {
+              "type": "reverb",
+              "name": "reverb",
+              "active": true,
+              "options": {
+                "duration": 2.5,
+                "decay": 3
+              },
+              "params": {
+                "wet": 0.4000000059604645
+              }
+            }
+          ],
+          "sends": [
+            {
+              "destName": "master",
+              "gain": 1
+            }
+          ]
+        }
+      ],
+      "tracks": [
+        {
+          "name": "lead",
+          "active": true,
+          "params": {
+            "gain": 0.749999999231994,
+            "pan": 0
+          },
+          "processors": [],
+          "sends": [
+            {
+              "destName": "master",
+              "gain": 1
+            },
+            {
+              "destName": "fx",
+              "gain": 0.30000001192092896
+            }
+          ],
+          "synth": {
+            "type": "oscsynth",
+            "options": {
+              "waveform": "triangle"
+            },
+            "params": {},
+            "events": [
+              {
+                "beat": 0,
+                "pitch": 48,
+                "velocity": 0.5,
+                "duration": 0.5
+              },
+              {
+                "beat": 1,
+                "pitch": 50,
+                "velocity": 0.5,
+                "duration": 0.5
+              },
+              {
+                "beat": 2,
+                "pitch": 52,
+                "velocity": 0.5,
+                "duration": 0.5
+              },
+              {
+                "beat": 3,
+                "pitch": 55,
+                "velocity": 0.5,
+                "duration": 0.5
+              }
+            ]
+          }
+        },
+        {
+          "name": "drums",
+          "active": true,
+          "params": {
+            "gain": 0.7999999931550191,
+            "pan": 0
+          },
+          "processors": [],
+          "sends": [
+            {
+              "destName": "master",
+              "gain": 1
+            }
+          ],
+          "synth": {
+            "type": "sampler",
+            "options": {},
+            "params": {},
+            "events": [
+              {
+                "beat": 0,
+                "pitch": 0,
+                "velocity": 0.9,
+                "duration": 0.2
+              },
+              {
+                "beat": 0.5,
+                "pitch": 4,
+                "velocity": 0.4,
+                "duration": 0.2
+              },
+              {
+                "beat": 1,
+                "pitch": 2,
+                "velocity": 0.8,
+                "duration": 0.2
+              },
+              {
+                "beat": 1.5,
+                "pitch": 4,
+                "velocity": 0.4,
+                "duration": 0.2
+              },
+              {
+                "beat": 2,
+                "pitch": 0,
+                "velocity": 0.9,
+                "duration": 0.2
+              },
+              {
+                "beat": 2.5,
+                "pitch": 4,
+                "velocity": 0.4,
+                "duration": 0.2
+              },
+              {
+                "beat": 3,
+                "pitch": 2,
+                "velocity": 0.8,
+                "duration": 0.2
+              },
+              {
+                "beat": 3.5,
+                "pitch": 4,
+                "velocity": 0.4,
+                "duration": 0.2
+              }
+            ]
+          }
+        }
+      ],
+      "modulators": [
+        {
+          "type": "lfo",
+          "name": "wobble",
+          "options": {
+            "waveform": "sine"
+          },
+          "params": {
+            "freq": 0.25
+          }
+        }
+      ],
+      "patches": [
+        {
+          "sourceName": "wobble",
+          "destName": "reverb.wet",
+          "depth": 0.15000000596046448
+        }
+      ]
+    },
+    "quiet": {
+      "clock": {
+        "bpm": 120,
+        "loopLengthBeats": 4
+      },
+      "harmony": {
+        "root": 60,
+        "scale": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ]
+      },
+      "master": {
+        "params": {
+          "gain": 1,
+          "pan": 0
+        },
+        "processors": []
+      },
+      "buses": [
+        {
+          "name": "fx",
+          "params": {
+            "gain": 1,
+            "pan": 0
+          },
+          "processors": [
+            {
+              "type": "reverb",
+              "name": "reverb",
+              "active": true,
+              "options": {
+                "duration": 2.5,
+                "decay": 3
+              },
+              "params": {
+                "wet": 0.6000000238418579
+              }
+            }
+          ],
+          "sends": [
+            {
+              "destName": "master",
+              "gain": 1
+            }
+          ]
+        }
+      ],
+      "tracks": [
+        {
+          "name": "lead",
+          "active": true,
+          "params": {
+            "gain": 0.4000000006128335,
+            "pan": 0
+          },
+          "processors": [],
+          "sends": [
+            {
+              "destName": "master",
+              "gain": 1
+            },
+            {
+              "destName": "fx",
+              "gain": 0.30000001192092896
+            }
+          ],
+          "synth": {
+            "type": "oscsynth",
+            "options": {
+              "waveform": "triangle"
+            },
+            "params": {},
+            "events": [
+              {
+                "beat": 0,
+                "pitch": 48,
+                "velocity": 0.5,
+                "duration": 0.5
+              },
+              {
+                "beat": 1,
+                "pitch": 50,
+                "velocity": 0.5,
+                "duration": 0.5
+              },
+              {
+                "beat": 2,
+                "pitch": 52,
+                "velocity": 0.5,
+                "duration": 0.5
+              },
+              {
+                "beat": 3,
+                "pitch": 55,
+                "velocity": 0.5,
+                "duration": 0.5
+              }
+            ]
+          }
+        },
+        {
+          "name": "drums",
+          "active": true,
+          "params": {
+            "gain": 0.24999999805274295,
+            "pan": 0
+          },
+          "processors": [],
+          "sends": [
+            {
+              "destName": "master",
+              "gain": 1
+            }
+          ],
+          "synth": {
+            "type": "sampler",
+            "options": {},
+            "params": {},
+            "events": [
+              {
+                "beat": 0,
+                "pitch": 0,
+                "velocity": 0.9,
+                "duration": 0.2
+              },
+              {
+                "beat": 0.5,
+                "pitch": 4,
+                "velocity": 0.4,
+                "duration": 0.2
+              },
+              {
+                "beat": 1,
+                "pitch": 2,
+                "velocity": 0.8,
+                "duration": 0.2
+              },
+              {
+                "beat": 1.5,
+                "pitch": 4,
+                "velocity": 0.4,
+                "duration": 0.2
+              },
+              {
+                "beat": 2,
+                "pitch": 0,
+                "velocity": 0.9,
+                "duration": 0.2
+              },
+              {
+                "beat": 2.5,
+                "pitch": 4,
+                "velocity": 0.4,
+                "duration": 0.2
+              },
+              {
+                "beat": 3,
+                "pitch": 2,
+                "velocity": 0.8,
+                "duration": 0.2
+              },
+              {
+                "beat": 3.5,
+                "pitch": 4,
+                "velocity": 0.4,
+                "duration": 0.2
+              }
+            ]
+          }
+        }
+      ],
+      "modulators": [
+        {
+          "type": "lfo",
+          "name": "wobble",
+          "options": {
+            "waveform": "sine"
+          },
+          "params": {
+            "freq": 0.25
+          }
+        }
+      ],
+      "patches": [
+        {
+          "sourceName": "wobble",
+          "destName": "reverb.wet",
+          "depth": 0.15000000596046448
+        }
+      ]
+    }
+  }
+}

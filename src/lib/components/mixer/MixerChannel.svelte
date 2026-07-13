@@ -3,11 +3,18 @@
 
     // onRemove is only passed for tracks/buses (see Mixer.svelte) — master
     // can't be removed, so leaving it undefined there hides the button below
-    // rather than wiring it to a no-op.
-    let { label, audioContext, channel, onInsert = () => {}, onRemove } = $props();
+    // rather than wiring it to a no-op. `patches` (every active NLLCPatch,
+    // same array Mixer.svelte already threads to PatchList) is only used to
+    // detect whether this channel's own gain/pan is a live patch
+    // destination — a patch connects straight into the raw AudioParam
+    // (see patch.js), so there's no bookkeeping on the param itself to read;
+    // cross-referencing destName is the only way to know.
+    let { label, audioContext, channel, patches = [], onInsert = () => {}, onRemove } = $props();
     const node = $derived(channel.gainNode);
     const gainParam = $derived(channel.params.gain);
     const panParam = $derived(channel.params.pan);
+    const gainPatched = $derived(patches.some((p) => p.destName === `${channel.name}.gain`));
+    const panPatched = $derived(patches.some((p) => p.destName === `${channel.name}.pan`));
 
     // "position" is the fader's linear 0-1 position; channel.params.gain's own
     // decode/encode (the same NLLCParam/taper.js exponential curve the
@@ -23,6 +30,9 @@
 
     let processorIds = $state("");
     let processorList = $state([]);
+
+    let sendsKey = $state("");
+    let sendList = $state([]);
 
     // Single rAF loop drives the level meter, keeps the fader/pan reflecting
     // external changes (console commands, automation), and polls this
@@ -58,6 +68,15 @@
             if (currentIds !== processorIds) {
                 processorIds = currentIds;
                 processorList = channel.processors.map((p) => ({ id: p.id, name: p.name, active: p.active }));
+            }
+
+            // Same poll-and-diff as the processor list above — a send's own
+            // gain is included in the key so a console send_gain= ramp
+            // updates the badge live, not just add/remove.
+            const currentSends = channel.sends.map((s) => `${s.id}:${s.destName}:${s.params.gain.get().toFixed(2)}`).join(",");
+            if (currentSends !== sendsKey) {
+                sendsKey = currentSends;
+                sendList = channel.sends.map((s) => ({ id: s.id, destName: s.destName, gain: s.params.gain.get() }));
             }
 
             rafId = requestAnimationFrame(tick);
@@ -146,12 +165,16 @@
             onpointerup={() => dragging = false}
         />
     </div>
-    <button class="param-label" title="click to insert &quot;gain=&quot; into the console" onclick={() => onInsert("gain=")}>gain</button>
+    <button class="param-label" title="click to insert &quot;gain=&quot; into the console" onclick={() => onInsert("gain=")}>
+        gain{#if gainPatched}<span class="mod-dot" title="gain is being modulated by a patch"></span>{/if}
+    </button>
 
     <div class="pan-dial" role="slider" tabindex="0" onpointerdown={handlePanPointerDown} aria-label="Pan" aria-valuemin="-1" aria-valuemax="1" aria-valuenow={pan}>
         <div class="pan-dial-indicator" style="transform: rotate({panAngle}deg)"></div>
     </div>
-    <button class="param-label" title="click to insert &quot;pan=&quot; into the console" onclick={() => onInsert("pan=")}>pan</button>
+    <button class="param-label" title="click to insert &quot;pan=&quot; into the console" onclick={() => onInsert("pan=")}>
+        pan{#if panPatched}<span class="mod-dot" title="pan is being modulated by a patch"></span>{/if}
+    </button>
 
     <div class="inserts">
         {#each processorList as proc (proc.id)}
@@ -164,7 +187,27 @@
         {/each}
     </div>
 
+    <!-- Where this channel's post-fader signal goes — read-only plus
+         click-to-paste, same scope as modulator/patch rows: adjusting a
+         send stays a console action, the badge just tees the command up. -->
+    <div class="sends-list">
+        {#each sendList as send (send.id)}
+            <button
+                class="send"
+                title="{send.id} → {send.destName} (gain {send.gain.toFixed(2)}) — click to insert &quot;send={send.id} send_gain=&quot; into the console"
+                onclick={() => onInsert(`send=${send.id} send_gain=`)}
+            >→{send.destName} {send.gain.toFixed(2)}</button>
+        {/each}
+    </div>
+
     <button class="label" title="click to insert &quot;{label}&quot; into the console" onclick={() => onInsert(label)}>{label}</button>
+    {#if channel.source}
+        <button
+            class="synth-label"
+            title="{channel.source.llm_summary} — click to insert &quot;synth=&quot; into the console"
+            onclick={() => onInsert("synth=")}
+        >{channel.source.name}</button>
+    {/if}
 </div>
 
 <style>
@@ -211,9 +254,9 @@
         font-size: 0.6rem;
         font-family: inherit;
         text-align: center;
-        color: var(--nllc-text-dim);
+        color: var(--nllc-accent);
         background: var(--nllc-bg);
-        border: 1px solid var(--nllc-border);
+        border: 1px solid var(--nllc-accent);
         border-radius: 2px;
         padding: 1px 2px;
         overflow: hidden;
@@ -223,8 +266,35 @@
     }
 
     .insert.inactive {
-        color: var(--nllc-border);
+        color: var(--nllc-text-dim);
+        border-color: var(--nllc-border);
         text-decoration: line-through;
+    }
+
+    .sends-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        width: 100%;
+    }
+
+    .send {
+        font-family: var(--nllc-font-mono);
+        font-size: 0.55rem;
+        text-align: center;
+        color: var(--nllc-text-dim);
+        background: none;
+        border: none;
+        border-radius: 2px;
+        padding: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+    }
+
+    .send:hover {
+        color: var(--nllc-accent);
     }
 
     .meter-and-fader {
@@ -312,6 +382,45 @@
     }
 
     .param-label:hover {
+        color: var(--nllc-accent);
+    }
+
+    /* A small pulsing dot beside "gain"/"pan" when a patch is actively
+       modulating it — the numeric fader/dial position still only ever shows
+       the base value (see MixerChannel.svelte's gainParam.get()/panParam.get()
+       polling), since that's the one thing a patch's live-modulated
+       AudioParam can't itself report back through a plain .value read. */
+    .mod-dot {
+        display: inline-block;
+        width: 5px;
+        height: 5px;
+        margin-left: 3px;
+        border-radius: 50%;
+        background: var(--nllc-accent);
+        animation: mod-pulse 1.2s ease-in-out infinite;
+    }
+
+    @keyframes mod-pulse {
+        0%, 100% { opacity: 0.35; }
+        50% { opacity: 1; }
+    }
+
+    .synth-label {
+        font: inherit;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        font-size: 0.6rem;
+        color: var(--nllc-text-dim);
+        text-align: center;
+        max-width: 64px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .synth-label:hover {
         color: var(--nllc-accent);
     }
 </style>

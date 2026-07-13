@@ -63,3 +63,14 @@ only other required change. That alone makes `/track_1
 add_processor=myprocessor` and `/myprocessor amount=0.8` work, including
 `remove_self`, `help`, ramping (`/myprocessor amount=0.8 3`), and `at=beat`/
 `at=cycle` deferral — no extra code needed beyond the `NLLCParam`.
+
+For a setting that *isn't* backed by any real `AudioParam` (e.g. a value
+that rebuilds a `WaveShaperNode` curve from scratch), declare it in
+`this.options` — `{ key: { get(), set(value), choices? } }`, where `set` can
+do arbitrary work (rebuild the curve) and throw a clean error on a bad
+value (see `NLLCReverb`'s `duration`/`decay` for the real example). That
+one declaration makes `/myprocessor curveAmount=3` settable at runtime
+(ramp specs rejected — options aren't rampable), lists it in `help` under
+"options", and round-trips it through `/save_session`/`/recall`: the base
+`getOptions()` derives from the map (same keys the constructor accepts
+back), so don't override it.

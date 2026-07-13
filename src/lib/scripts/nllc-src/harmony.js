@@ -12,6 +12,19 @@ export function createHarmonyContext() {
     };
 };
 
+// Parses a degree/semitone list from either an actual array or the comma
+// string the console produces ("0,2,4,5,7,9,11") into a validated number
+// array — shared by NLLCRandomNotes' scale (constructor and runtime option)
+// and the /harmony command's scale=, so the two can't drift on what a
+// "list of degrees" accepts. Throws on anything empty or non-numeric.
+export function parseDegreeList(value, label = "scale") {
+    const list = (Array.isArray(value) ? value : String(value).split(",")).map(Number);
+    if (list.length === 0 || list.some((n) => !Number.isFinite(n))) {
+        throw new Error(`invalid ${label} "${value}" — expected a comma-separated list of numbers, e.g. 0,2,4,5,7,9,11`);
+    }
+    return list;
+};
+
 // Maps a scale-degree (may be negative, or larger than one octave) to a MIDI
 // note number via `harmony.root`/`harmony.scale`, wrapping into higher/lower
 // octaves as needed.

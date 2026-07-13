@@ -19,6 +19,12 @@ export class NLLCProcessor {
         // Distinct from raw AudioParam getters (e.g. .wet) used as automation targets.
         this.params = {};
         this.automation = [];
+
+        // Non-rampable runtime settings — see NLLCSynth.options for the
+        // shape ({ get(), set(value), choices? } per key) and everything a
+        // single declaration here buys (console set, help, completion,
+        // session round-trip via getOptions below).
+        this.options = {};
     };
 
     addAutomation(event) {
@@ -32,5 +38,13 @@ export class NLLCProcessor {
     connect(destination) {
         this.output.connect(destination.input ?? destination);
         return destination;
+    };
+
+    // Derived from the `options` map above — see NLLCSynth.getOptions; same
+    // idea, used by session.js when serializing a channel's inserts.
+    getOptions() {
+        const out = {};
+        for (const [key, option] of Object.entries(this.options)) out[key] = option.get();
+        return out;
     };
 };

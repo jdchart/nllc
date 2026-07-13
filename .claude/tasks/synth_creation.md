@@ -7,3 +7,4 @@ You will create a new synth for the environment.
 3. Look through existing synths and read examples that seem similar.
 4. Decide the best structural apporach for the synth in a modular synth kind of spirit, and decide with the user if this is the best approach.
 5. Create the synth.
+6. Make sure to register and udate commands, code suggestions etc.

@@ -41,6 +41,27 @@ a string that gets echoed into the console log (or throws/returns nothing — se
 `run()`, which catches exceptions and turns them into an error string
 automatically, so handlers don't need their own `try`/`catch`).
 
+**Also add the new command's name to `RESERVED_NAMES` in `nllc.js`** — that
+set is what stops a track/bus/processor/modulator being created with a name
+the router would dispatch as your command first (the object would be
+permanently shadowed). `createCommandRouter` sanity-checks its command keys
+against the set when the router is built and `console.warn`s about any it
+finds missing, so a forgotten entry is loud in the browser console rather
+than a silent namespace hole.
+
+A handler can also return a `Promise<string>` instead of a plain string, for
+a command that genuinely can't resolve synchronously — `load_session` is the
+one example today (it opens a file picker and awaits the chosen file's
+contents before it has anything to report). `run()` awaits it and converts a
+rejection into the same clean error string a sync throw gets, so you still
+don't need your own `try`/`catch`; `CodeEditor.svelte` already awaits
+whatever `executeCommand` returns, so nothing on the UI side needs to change
+either. `executeCommand` itself only pays for a `Promise.all` when a
+submitted line's segments actually contain one (see `commands.js`'s doc
+comment on `executeCommand`) — a plain synchronous command line is unaffected.
+Reach for this only when the work genuinely can't be synchronous (a file
+read, a fetch); don't make a handler async just because it *could* be.
+
 ## 2. A new rampable param on channels, processors, or modulators
 
 If the new behavior is a numeric param that should be gettable/settable/
@@ -103,11 +124,17 @@ value `createCommandRouter` returns — see
 has the same "not derived from the command branches" gap `help` does, and the
 same fix for the same two cases:
 
-- A new **top-level command** needs nothing extra — `suggest` reads
-  `Object.keys(commands)` once (`topLevelNames`), so it's suggestible the
-  moment it's added to the `commands` object in step 1 above.
+- A new **top-level command** needs nothing extra for *suggestions* —
+  `suggest` reads `Object.keys(commands)` once (`topLevelNames`), so it's
+  suggestible the moment it's added to the `commands` object in step 1
+  above. (It still needs its `RESERVED_NAMES` entry in `nllc.js`, and a
+  `TOP_LEVEL_KEYWORDS` entry if it has params of its own worth completing.)
 - A new **rampable param** (step 2) needs nothing extra either —
   `resolveKeywordsFor` reads the target object's own `params` map directly.
+  A new **option** likewise (the `options` map is read the same way), and
+  giving it a `choices` array makes its *values* complete for free too
+  (`resolveValueCandidates` falls through to any resolved object's — or a
+  track's synth's — matching option's `choices`).
 - A new **non-rampable field on channel commands** (step 3, like `add_event`/
   `synth=`) needs a manual addition to `commands.js`'s
   `CHANNEL_ACTION_KEYWORDS` (or `PARAM_OBJECT_ACTION_KEYWORDS` for a
@@ -115,7 +142,13 @@ same fix for the same two cases:
   `paramObjectHelp` don't actually share with (each has its own
   hand-maintained keyword source; see `commands.js`'s comment above
   `CHANNEL_ACTION_KEYWORDS` for why keeping those as prose-vs-bare-keyword
-  lists wasn't worth forcibly unifying).
+  lists wasn't worth forcibly unifying). It also needs adding to
+  `CHANNEL_COMMAND_KEYS`/`PARAM_OBJECT_COMMAND_KEYS` (the consumed-key sets
+  the end-of-command unknown-key check reads) — miss that and every use of
+  your new key gets an `unknown param` complaint appended.
+- A key whose **value** has a small enumerable domain (an id, a registered
+  type, a curve name) can get value completion via a branch in
+  `resolveValueCandidates`.
 
 ## Command-name dispatch
 

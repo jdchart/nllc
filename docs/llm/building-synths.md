@@ -50,7 +50,26 @@ future key/scale-changing command; skip this if `pitch` means something else
 (e.g. a sample-slot index, like `NLLCSampler`). Optional: populate
 `this.params` with `NLLCParam`s (`param.js`) for runtime-adjustable synth
 params, the same way a processor does (see `docs/llm/building-processors.md`)
-— note the command router doesn't currently read `channel.source.params`
-through `applyParams()` the way it does `processor.params`/`modulator.params`,
-so this would need a small `commands.js` addition to be reachable from the
-console today.
+— `channelCommand` routes a track's synth's `params` (and `options`, below)
+through the track's own name automatically, so `/mytrack cutoff=800 2b`
+works with no `commands.js` change.
+
+For a runtime setting *not* backed by any `AudioParam` (like `waveform`
+above), declare it in `this.options` instead — `{ key: { get(), set(value),
+choices? } }`:
+
+```js
+this.options = {
+    waveform: {
+        get: () => this.waveform,
+        set: (value) => { this.waveform = value; },
+        choices: ["sine", "square", "sawtooth", "triangle"],
+    },
+};
+```
+
+That one declaration makes `/mytrack waveform=square` work (validated
+against `choices`, which also drive ghost-text completion; ramp specs
+rejected), lists it in `help`, and round-trips it through
+`/save_session`/`/recall` — the base `getOptions()` derives from this map
+(same keys your constructor accepts back), so don't override it.

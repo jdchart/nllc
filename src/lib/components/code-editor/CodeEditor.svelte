@@ -26,18 +26,35 @@
     let historyIndex = -1;
     let historyDraft = "";
 
-    // The current ghost-text completion — { start, full } (absolute index
-    // the active token starts at, and the complete string it could complete
-    // to) or null — recomputed on every keystroke/cursor move via
-    // updateSuggestion, never touched directly by the template.
+    // The current ghost-text completion — { start, end, full } (the current
+    // token's span in `input`, both absolute indices, and the complete
+    // string it could complete to) or null — recomputed on every keystroke/
+    // cursor move via updateSuggestion, never touched directly by the
+    // template. `end` need not be input.length: a suggestion can complete a
+    // token anywhere in the line, not just a trailing one.
     let suggestion = $state(null);
-    // The greyed-out remainder rendered after the caret — see the .ghost
-    // markup below, which relies on a monospace font so its invisible
-    // "already-typed" spacer lines up pixel-for-pixel with the real input.
-    const ghostText = $derived(suggestion ? suggestion.full.slice(input.length - suggestion.start) : "");
+    // The three-part display the .ghost overlay paints, composited around
+    // wherever the suggestion's token sits (not necessarily at the end of
+    // `input`) — see the .ghost markup below and the .input's own
+    // color:transparent, which together make this overlay (not the real
+    // input's native glyphs) the only thing actually visible, so a
+    // suggestion can visually push later-in-the-line text over instead of
+    // only ever appending after it.
+    const ghostParts = $derived.by(() => {
+        if (!suggestion) return { before: input, added: "", after: "" };
+        const typedOfToken = input.slice(suggestion.start, suggestion.end);
+        return {
+            before: input.slice(0, suggestion.start) + typedOfToken,
+            added: suggestion.full.slice(typedOfToken.length),
+            after: input.slice(suggestion.end),
+        };
+    });
 
-    async function submit() {
-        const text = input.trim();
+    // Shared by submit() (the input box's own Enter handling) and the
+    // exported runCommand (below — driven from outside the console, e.g. the
+    // mixer's Transport save/load buttons), so a command triggered either
+    // way logs identically and rides the same history.
+    async function runText(text) {
         if (!text) return;
 
         if (history[history.length - 1] !== text) history.push(text);
@@ -45,8 +62,6 @@
         historyDraft = "";
 
         log.push({ type: "input", text });
-        input = "";
-        suggestion = null;
         queueScroll();
 
         const result = await onCommand(text);
@@ -54,6 +69,25 @@
             log.push({ type: "output", text: result });
             queueScroll();
         }
+    };
+
+    async function submit() {
+        const text = input.trim();
+        if (!text) return;
+
+        input = "";
+        suggestion = null;
+        await runText(text);
+    };
+
+    // Runs a command as if the user had typed and submitted it — the vehicle
+    // for UI affordances outside the console itself (e.g. Transport.svelte's
+    // Save/Load buttons) to trigger a command while still showing up in the
+    // scrollback exactly like a typed one, rather than succeeding/failing
+    // silently. Reached via SessionPage.svelte's bind:this={codeEditor}, the
+    // same handle insertAtCursor already uses.
+    export function runCommand(text) {
+        return runText(text);
     };
 
     function recallHistory(direction) {
@@ -80,21 +114,21 @@
     // so reading the event target directly avoids a one-keystroke-stale race.
     function updateSuggestion(target) {
         if (!target) { suggestion = null; return; }
-        const text = target.value;
-        const cursor = target.selectionStart;
-        suggestion = cursor === text.length ? onSuggest(text, cursor) : null;
+        suggestion = onSuggest(target.value, target.selectionStart);
     };
 
-    // Accepts the current suggestion into `input`. `run: true` (Enter with a
-    // suggestion showing) submits the completed command immediately instead
-    // of leaving it in the input for further editing — see handleKeydown.
+    // Accepts the current suggestion into `input`, splicing it into the
+    // token's own span (suggestion.start..end) rather than always appending
+    // at the end — the token being completed isn't necessarily at the end of
+    // the line (see suggestCompletion). `run: true` (Enter with a suggestion
+    // showing) submits the completed command immediately instead of leaving
+    // it in the input for further editing — see handleKeydown.
     function acceptSuggestion({ run } = {}) {
         if (!suggestion) return;
 
-        const typedLength = input.length - suggestion.start;
-        const remainder = suggestion.full.slice(typedLength);
         const spacer = run || suggestion.full.endsWith("=") ? "" : " ";
-        input = input + remainder + spacer;
+        const cursor = suggestion.start + suggestion.full.length + spacer.length;
+        input = input.slice(0, suggestion.start) + suggestion.full + spacer + input.slice(suggestion.end);
         suggestion = null;
 
         if (run) {
@@ -102,7 +136,7 @@
         } else {
             requestAnimationFrame(() => {
                 inputEl?.focus();
-                inputEl?.setSelectionRange(input.length, input.length);
+                inputEl?.setSelectionRange(cursor, cursor);
             });
         }
     };
@@ -178,7 +212,7 @@
     <div class="input-row">
         <span class="prompt">&gt;</span>
         <div class="input-wrap">
-            <div class="ghost" aria-hidden="true"><span class="ghost-typed">{input}</span><span class="ghost-suggestion">{ghostText}</span></div>
+            <div class="ghost" aria-hidden="true"><span class="ghost-typed">{ghostParts.before}</span><span class="ghost-suggestion">{ghostParts.added}</span><span class="ghost-typed">{ghostParts.after}</span></div>
             <input
                 class="input"
                 type="text"
@@ -237,12 +271,18 @@
         color: var(--nllc-accent);
     }
 
-    /* Ghost-text completion: .ghost sits behind .input in the same box
+    /* Ghost-text completion: .ghost sits on top of .input in the same box
        (same font/padding/border, both zeroed, so the two line up exactly —
-       relies on the console's monospace font for pixel-accurate alignment).
-       .ghost-typed is invisible but still occupies width, so .ghost-suggestion
-       (the only thing actually painted) starts exactly where the real
-       input's own typed text ends. */
+       relies on the console's monospace font for pixel-accurate alignment)
+       and is the only layer that actually paints any text — .input's own
+       glyphs are made transparent (caret-color keeps the real caret visible)
+       so a suggestion spliced into the *middle* of the line (not just
+       appended after it — see suggestCompletion/acceptSuggestion) can push
+       later already-typed text over in the overlay without a mismatched,
+       un-shifted copy of that text showing through from .input underneath.
+       Both .ghost-typed spans (before/after the suggestion) render in the
+       normal text color; only .ghost-suggestion (the inserted remainder) is
+       dimmed. */
     .input-wrap {
         position: relative;
         flex: 1;
@@ -265,14 +305,20 @@
     }
 
     .ghost-typed {
-        visibility: hidden;
+        color: var(--nllc-text);
     }
 
     .ghost-suggestion {
         color: var(--nllc-text-dim);
     }
 
-    .input {
+    /* Tag-qualified (not bare ".input") — a submitted command's own log line
+       also carries the "input" class (entry.type, see the {#each log} markup
+       above: class="line input"), which a bare ".input { color: transparent }"
+       would match too, silently making every echoed command invisible in the
+       scrollback. Scoping to the actual <input> element only is what this
+       rule needs. */
+    input.input {
         flex: 1;
         min-width: 0;
         position: relative;
@@ -281,8 +327,18 @@
         outline: none;
         padding: 0;
         margin: 0;
-        color: var(--nllc-text);
+        color: transparent;
+        caret-color: var(--nllc-text);
         font-family: inherit;
         font-size: inherit;
+    }
+
+    input.input::placeholder {
+        color: var(--nllc-text-dim);
+    }
+
+    input.input::selection {
+        background: var(--nllc-accent);
+        color: transparent;
     }
 </style>

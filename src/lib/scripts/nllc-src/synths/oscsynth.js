@@ -14,6 +14,18 @@ export class NLLCOscSynth extends NLLCSynth {
         super(audioContext, { name });
         this.llm_summary = "A basic subtractive synth voice: single oscillator per note into a gain envelope.";
         this.waveform = waveform;
+
+        // Runtime-settable (each trigger() reads this.waveform fresh, so a
+        // set applies from the next note on) — /track_1 waveform=square.
+        // `choices` drives both console validation and ghost-text
+        // completion; getOptions() (base class) round-trips it for sessions.
+        this.options = {
+            waveform: {
+                get: () => this.waveform,
+                set: (value) => { this.waveform = value; },
+                choices: ["sine", "square", "sawtooth", "triangle"],
+            },
+        };
     };
 
     // Builds one voice per note: an oscillator through a gain envelope (a fast

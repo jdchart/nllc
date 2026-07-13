@@ -12,15 +12,34 @@ export class NLLCLFO extends NLLCModulator {
         super(audioContext, { name });
         this.llm_summary = "A low-frequency oscillator: a continuous bipolar (-1..1) control signal at a given rate, for patching into any parameter.";
 
+        this.waveform = waveform;
+
         this.osc = audioContext.createOscillator();
         this.osc.type = waveform;
         this.osc.frequency.value = freq;
         this.osc.connect(this.output);
         this.osc.start();
 
+        // Not a param (no AudioParam behind a waveform choice) but still
+        // runtime-settable — OscillatorNode.type is live-mutable, so
+        // /lfo1 waveform=square switches the running oscillator in place.
+        this.options = {
+            waveform: {
+                get: () => this.waveform,
+                set: (value) => {
+                    this.waveform = value;
+                    this.osc.type = value;
+                },
+                choices: ["sine", "square", "sawtooth", "triangle"],
+            },
+        };
+
         // Console/UI-facing control surface (see commands.js's applyParams).
+        // Deliberately allowed well past "low frequency" — patching an LFO
+        // running at audio rate into a param is classic FM territory — but
+        // still bounded to the audible ballpark rather than unbounded.
         this.params = {
-            freq: new NLLCParam(this.osc.frequency),
+            freq: new NLLCParam(this.osc.frequency, { min: 0, max: 20000 }),
         };
     };
 

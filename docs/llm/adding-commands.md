@@ -15,7 +15,9 @@ points:
    string — no need for your own try/catch. Always run a user-supplied
    number through `toNumber(raw, label)` rather than a bare `Number(...)` —
    it throws on a non-finite result instead of silently writing `NaN` into
-   persistent state.
+   persistent state. Also add the command's name to `RESERVED_NAMES` in
+   `nllc.js` (keeps objects from being created with a name your command
+   shadows — the router warns at build time if you forget).
 
 2. **New rampable param on every channel, processor, or modulator** (like
    `gain=`, or any processor/modulator's own params): wrap it as an
@@ -44,6 +46,16 @@ const commands = {
     },
 };
 ```
+
+A handler may return `Promise<string>` instead of a plain string when the
+work genuinely can't resolve synchronously (`load_session` is the one
+example — it awaits a picked file's contents). `run()` awaits it and
+converts a rejection to the same clean error string a sync throw gets, and
+`executeCommand` transparently returns a `Promise` itself only when a
+submitted line's segments actually contain one — `CodeEditor.svelte` already
+awaits `executeCommand`'s result either way, so nothing else needs to
+change. Don't reach for this unless the work is genuinely async (a file
+read, a `fetch`).
 
 Dispatch order in `executeCommand`: top-level `commands` → `master` → track by
 name → bus by name → processor by name → modulator by name → `unknown

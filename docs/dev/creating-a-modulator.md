@@ -8,7 +8,7 @@ with `NLLCParam`s so the console can inspect/control it — structurally, this
 is almost exactly a processor (see [creating-a-processor.md](creating-a-processor.md)),
 except a modulator never joins a channel's insert chain. It exists purely to
 be *patched* into some other object's parameter (see
-[user/commands.md](../user/commands.md#patching-modulators) for the `/patch`
+[user/commands.md](../user/commands.md#modulators-and-patches) for the `/patch`
 command), so by convention its raw `output` should be a bipolar signal
 (roughly `-1..1`) — the *patch* connecting it somewhere else decides the
 depth, not the modulator itself.
@@ -94,6 +94,34 @@ processor's sibling, `processors/reverb.js`/`processors/delay.js`):
   needs it, since `NLLC._resolveDest` already reaches `params[key].audioParam`
   directly.
 
+## Optional: runtime options (settable, not rampable)
+
+For a runtime setting that isn't a real `AudioParam` (like `NLLCLFO`'s
+`waveform`, or `NLLCRandomNotes`' `scale`), store it on `this` in the
+constructor and declare it in `this.options`:
+
+```js
+this.options = {
+    waveform: {
+        get: () => this.waveform,
+        set: (value) => {
+            this.waveform = value;
+            this.osc.type = value; // live-mutable on OscillatorNode
+        },
+        choices: ["sine", "square", "sawtooth", "triangle"],
+    },
+};
+```
+
+One declaration makes it console-settable (`/mod1 waveform=square`,
+validated against `choices`, which also drive ghost-text completion; ramp
+specs rejected), lists it in `help` under "options", and round-trips it
+through `/save_session`/`/recall` — the base `getOptions()` derives from
+this map (the same keys your constructor accepts back), so don't override
+it. Every `NLLCParam` in `this.params` (like `rate` above) already
+round-trips on its own. See
+[architecture.md](architecture.md#a-third-path-structural-reconciliation-for-recall).
+
 ## Registering it
 
 ```js
@@ -113,12 +141,53 @@ and `params`. `/patch source=wobble1 dest=reverb.wet depth=0.3` patches it in
 exactly the same way an `lfo` would, since patching only cares that the
 source object has an `.output`.
 
-## What a modulator can't do (yet)
+## An alternative shape: generating discrete events instead of a signal
 
-A modulator today can only ever produce a continuous control signal — there's
-no concept of a modulator (or a patch) *generating discrete events* (notes/
-triggers) the way an algorithmic melody generator would need. Building that
-would mean giving `NLLCSynth` some kind of "event input" alongside its
-manually-authored `events` array, which hasn't been designed — don't invent
-one speculatively; if you need this, it's worth a design discussion first
-rather than bolting something on.
+Everything above assumes a modulator produces a *continuous* signal to patch
+into a parameter — the common case. A modulator can instead generate
+discrete **notes** (e.g. an algorithmic melody/rhythm generator) and feed
+them straight into a track's synth — see `modulators/randomnotes.js`
+(`NLLCRandomNotes`) for the real example, and
+[architecture.md](architecture.md#event-generating-modulators-the-discrete-counterpart-to-a-patch)
+for the full model. The shape is different enough from the rest of this
+document that it's worth calling out rather than shoehorning into the
+"builds a signal, connects into `this.output`" recipe above:
+
+- Implement `generateEvents(fromBeat, toBeat)` instead of relying on a
+  meaningful `this.output` — called by `NLLCClock` every tick with an
+  **absolute** (non-loop-relative) beat range, so state like "beats since the
+  last note" can advance forever rather than resetting every loop pass (a
+  fixed, loop-relative `events` array — the shape a synth's own pattern
+  uses — assumes a *repeating* pattern, which generated notes usually aren't).
+  Return whatever `NLLCEvent`s should fire in that range.
+- Initialize `this.eventDestinations = []` — the clock delivers generated
+  notes to every channel in this array via `destination.source.trigger(...)`,
+  the exact same call a manually-authored event uses. This array is
+  maintained for you by `NLLCEventPatch` (`patch.js`), not something you
+  populate yourself.
+- If the modulator keeps its own **absolute-beat** state (like
+  `NLLCRandomNotes`' `_nextCandidateBeat` cursor), implement
+  `onClockStart()` (another duck-typed optional hook, called by
+  `NLLCClock.start()` on every unit) to reset it — a clock (re)start
+  rewinds absolute beats to 0, and stale absolute-beat state would leave
+  the modulator silently generating nothing after a `/stop` `/start` until
+  the clock caught back up to it.
+- Such a modulator is patched into a synth with the reserved `.notes`
+  destination instead of a `name.param` — `/patch source=<generator>
+  dest=<track>.notes` (see [user/commands.md](../user/commands.md#event-generating-modulators-patching-notes-into-a-synth))
+  — which `nllc.js`'s `createPatch` recognizes automatically by duck-typing
+  `generateEvents` on the source; no separate command or registry is needed.
+- If a param on this kind of modulator needs real `AudioParam` scheduling
+  (ramping, `at=`, `/recall`) but isn't naturally audio-rate — like
+  `NLLCRandomNotes`'s `probability`/`min_gap` — a `ConstantSourceNode` works,
+  but **must be routed through a muted sink into `audioContext.destination`**
+  (see `NLLCRandomNotes._silentSink`), not left fully disconnected: a
+  disconnected node's `setValueAtTime`-scheduled automation can silently
+  never be reflected back in a later `.value` read in some browsers, even
+  though a direct `.value =` assignment always works regardless — see
+  `source-overview.md`'s `modulators/randomnotes.js` section for the full
+  explanation. Anything extra a modulator owns beyond
+  `this.output` (like those sink nodes) needs its own `dispose()` method,
+  called by `NLLC.removeModulator` the same duck-typed-optional way as
+  `generateEvents` itself — the base class's generic `output.disconnect()`
+  alone won't reach them.

@@ -1,38 +1,53 @@
 # Checklist before next session
 
-- [ ] **Still nothing committed, two sessions deep.** `git status`/`git diff`
-      now shows 18 modified files spanning last session's console/mixer UI
-      work (help text, history, click-to-paste, ghost-text suggestions) and
-      this session's bug fixes (`channel.js`, `commands.js`,
-      `MixerChannel.svelte`, `Mixer.svelte`, `synths/sampler.js`) plus doc
-      updates. Worth committing as a few focused commits rather than one big
-      one before anything else piles on top.
-- [ ] Try the mixer fader/pan by hand: `npm run dev -- --open`, open
-      `/code-editor`, drag a track's gain fader and pan dial. This was
-      refactored to go through `channel.params.gain`/`.pan` instead of a
-      separate taper import — verified by `svelte-check` and code inspection
-      (the math is identical, just re-sourced) but not by an actual
-      drag-interaction test.
-- [ ] Click the new × remove button on a track/bus strip in the mixer (not
-      just via console `remove_self`) — confirmed working via a scripted
-      Playwright click, worth a manual look too since it's a new UI
-      affordance.
-- [ ] If you use patches (`/patch source=... dest=...`) in real sessions,
-      note that a real bug in that path was just fixed: patching a
-      processor's output used to get silently and permanently broken the
-      moment *any* processor was added/removed/bypassed on the same channel.
-      If you've hit weird "patch stopped working" or "can't unpatch" behavior
-      in the past, that was almost certainly this — should be gone now.
-- [ ] `.claude/context/known_bugs.md` is still empty — add anything you find
-      while trying the above, or from real use since the last review.
-- [ ] Two smaller findings were surfaced but intentionally left unfixed (not
-      asked for this session): send-routing doesn't detect a longer cycle
-      (bus A → bus B → bus A), and `NLLCProcessor.connect()` is dead/unused
-      code. Low priority, flagging in case you want them picked up later.
-- [ ] Optional follow-up, carried over from before: give `NLLCReverb.wet`,
-      `NLLCDelay`'s params, and `NLLCLFO.freq` real `min`/`max` bounds — still
-      shows no range in `/reverb help` etc.
-- [ ] `notes-for-me.md` still has a long list of its own TODOs (save/restore
-      state, session-to-JSON, modulator-generated events, dotted-path syntax
-      like `/track_1.gain=0.5`, showing modulation on gain/pan in the UI) —
-      none touched this session, worth a look if you're picking the next task.
+- [ ] **Commit the backlog — top priority.** It's now seven sessions deep
+      (last real commit: `19460b9`). This session alone is several logical
+      commits: (1) review bugfixes (name namespace/`RESERVED_NAMES`,
+      master speakers guards, empty-value/typo errors, `randomnotes`
+      restart via `onClockStart`, duplicate-`.notes` rejection, recall
+      event deferral, mixer identity-diff, transport staleness, param
+      bounds), (2) the options mechanism (base classes + all six
+      synth/processor/modulator subclasses + `applyOptions` routing),
+      (3) `/harmony` + event editing (`events`/`remove_event=`),
+      (4) loop automation (console `automate=` family + `paramKey`
+      serialization + recall reconcile + synth-type restore),
+      (5) mixer UI (sends badges, note-flash dot, loop ring),
+      (6) the docs pass. Next session can split and commit these if you
+      don't want to do it by hand.
+- [ ] **Listen to the loop-automation feel** (the sandbox can't render
+      audio): `/add_track name=lead`, a couple of `add_event`s, `/start`,
+      then `/lead automate=gain from=0.9 to=0.2 beat=2 duration=1` —
+      confirm the dip repeats musically every loop, and that
+      `automate=... once` (e.g. a fade-in) fires exactly once.
+- [ ] **Hear a live `/harmony` change**: author a pattern with `degree=`
+      (not `pitch=`), let it loop, then `/harmony root=57
+      scale=0,2,3,5,7,8,10` mid-playback — the pattern should retune on the
+      next notes without a glitch.
+- [ ] **Hear the runtime options**: `/lead waveform=square` mid-playback
+      (should change from the next note), `/lfo1 waveform=triangle` while
+      patched (wobble shape changes in place), `/reverb duration=6` (brief
+      tail discontinuity is expected/documented — judge whether it's
+      acceptable to your ears).
+- [ ] **Check `/stop` `/start` with a `randomnotes` patch running** — it
+      should resume generating immediately after restart (this was the
+      absolute-beat-cursor bug; fixed and logic-verified, but audible
+      confirmation is worth 10 seconds).
+- [ ] **Look at the three new mixer bits** and judge the visuals (sized by
+      code, not by eye): the per-strip sends list under the inserts, the
+      "notes" flash dot on a `randomnotes` tile while patched and playing,
+      and the loop-progress ring around the Transport LED.
+- [ ] **Save a session file and reload it twice in a row** — second load
+      should refresh the mixer strips correctly (identity-diff fix), and
+      automation/waveform/scale should all come back.
+- [ ] Param bounds are an opinionated call — check you're happy with them:
+      delay `feedback` capped at 0.95 (runaway guard), `wet` at 2, lfo
+      `freq` at 20k. Trivial to change in the class constructors.
+- [ ] Skim the updated docs (`commands.md`'s new "Params vs. options" and
+      "Loop automation" sections, the rewritten "Names" section,
+      `objects.md`'s option tables) before trusting them as future context.
+- [ ] `Ollama()` is still an empty stub — with the command surface now
+      solid and forgiving, and `snapshotSession()` producing the config
+      JSON your plan sends to the model, next session is a good time to
+      start it.
+- [ ] Note anything that feels off during the above in
+      `.claude/context/known_bugs.md` (currently empty).

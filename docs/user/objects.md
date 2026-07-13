@@ -9,9 +9,9 @@
 One oscillator per triggered note: a short linear attack (5ms) into an exponential
 decay over the note's duration.
 
-| Constructor option | Default | Meaning |
-|---|---|---|
-| `waveform` | `"sawtooth"` | Any `OscillatorNode.type` value (`sine`, `square`, `sawtooth`, `triangle`). |
+| Constructor option | Default | Runtime option | Meaning |
+|---|---|---|---|
+| `waveform` | `"sawtooth"` | `waveform` | Any `OscillatorNode.type` value (`sine`, `square`, `sawtooth`, `triangle`). Runtime-settable as an **option** (`/lead waveform=square`, applies from the next note) — not rampable. |
 
 Starts with **no events** — silent until you `add_event` onto it (see
 [Events](#events) below): `/add_track name=lead synth=oscsynth waveform=square`
@@ -41,6 +41,10 @@ to slot `0`; negative pitches wrap correctly too). Starts with **no events** —
 silent until you `add_event` onto it (see [Events](#events) below). `degree=`
 doesn't apply here — the sampler always reads `pitch` as a slot index, never
 resolves it against the harmony context.
+
+| Constructor option | Default | Runtime option | Meaning |
+|---|---|---|---|
+| `samples` | the 6 files above | `samples` (option) | Comma-separated list of filenames under `static/samples` to load into slots, in order. Runtime-settable — `/drums samples="CLAUDE - kick02.wav,CLAUDE - hat13.wav"` (quoted, since these filenames contain spaces) swaps the slot list live; each slot is silent until its file finishes (re)loading, same fire-and-forget rule as construction. Not rampable. Round-trips through sessions. |
 
 ## Buses (`/add_bus`)
 
@@ -73,9 +77,9 @@ impulse response — exponentially-decaying random noise, not a real-space recor
 
 | Constructor option | Default | Runtime param | Meaning |
 |---|---|---|---|
-| `duration` | `2.5`s | — | Length of the generated impulse response. Not exposed as a runtime param — set at creation only. |
-| `decay` | `3` | — | Exponent controlling how fast the impulse response decays. Creation-only. |
-| `wet` | `0.3` | `wet` | Wet-signal mix level (0–1). |
+| `duration` | `2.5`s | `duration` (option) | Length of the generated impulse response, in seconds (`0..20`). Runtime-settable option — `/reverb duration=4` regenerates the IR in place (a brief tail discontinuity is audible; that's inherent to swapping a convolution buffer). Not rampable. |
+| `decay` | `3` | `decay` (option) | Exponent controlling how fast the impulse response decays. Runtime-settable option, regenerates the IR like `duration`. Not rampable. |
+| `wet` | `0.3` | `wet` | Wet-signal mix level. Clamped to `0..2` (up to a 2× boost, never unbounded). |
 
 ### `delay` — `NLLCDelay`
 
@@ -87,10 +91,10 @@ lines that feed back into *each other* (ping-pong) rather than themselves.
 
 | Constructor option | Default | Runtime param | Meaning |
 |---|---|---|---|
-| `time` | `0.375`s | `time` | Base delay time (right channel is offset by `stereoOffset` above this). |
-| `feedback` | `0.35` | `feedback` | Cross-feedback amount (applied symmetrically to both channels). |
-| `wet` | `0.3` | `wet` | Wet-signal mix level (0–1). |
-| `stereoOffset` | `0.06`s | — | Extra delay time on the right channel for stereo width. Creation-only, not currently exposed as a runtime param. |
+| `time` | `0.375`s | `time` | Base delay time (right channel is offset by `stereoOffset` above this). Clamped to `0..5` (the delay node's own maximum). |
+| `feedback` | `0.35` | `feedback` | Cross-feedback amount (applied symmetrically to both channels). Clamped to `0..0.95` — at or past unity the cross-feeding lines recirculate a growing signal forever (a runaway loop, not an effect). |
+| `wet` | `0.3` | `wet` | Wet-signal mix level. Clamped to `0..2`. |
+| `stereoOffset` | `0.06`s | `stereoOffset` (option) | Extra delay time on the right channel for stereo width (`0..1`s). Runtime-settable option — not rampable. |
 
 ## Modulators (`type=` on `/add_modulator`)
 
@@ -106,11 +110,42 @@ parameter with `/patch` — see [commands.md](commands.md#modulators-and-patches
 
 | Constructor option | Default | Runtime param | Meaning |
 |---|---|---|---|
-| `freq` | `1`Hz | `freq` | Oscillation rate. Rampable/deferrable like any param. |
-| `waveform` | `"sine"` | — | Any `OscillatorNode.type` value (`sine`, `square`, `sawtooth`, `triangle`). Creation-only. |
+| `freq` | `1`Hz | `freq` | Oscillation rate. Rampable/deferrable like any param. Clamped to `0..20000` — deliberately allowed well past "low frequency", since patching an audio-rate LFO into a param is classic FM territory. |
+| `waveform` | `"sine"` | `waveform` (option) | Any `OscillatorNode.type` value (`sine`, `square`, `sawtooth`, `triangle`). Runtime-settable option — the running oscillator switches shape in place. Not rampable. |
 
 `/add_modulator type=lfo freq=2 name=lfo1` then `/patch source=lfo1
 dest=reverb.wet depth=0.2` wobbles `reverb`'s wet mix at 2Hz.
+
+### `randomnotes` — `NLLCRandomNotes`
+
+> Generates random note events (probability/min-gap/scale) and feeds a
+> synth's control input via `/patch dest=<track>.notes` — doesn't touch
+> manually-authored events.
+
+Unlike `lfo`, this doesn't produce a continuous signal to patch into a
+parameter — it generates discrete **notes**, algorithmically, and feeds them
+straight into a track's synth via the reserved `.notes` patch destination
+(see [commands.md](commands.md#event-generating-modulators-patching-notes-into-a-synth)),
+running alongside — never replacing — anything you `add_event`'d by hand.
+
+| Constructor option | Default | Runtime param | Meaning |
+|---|---|---|---|
+| `probability` | `0.5` | `probability` | Chance (0–1) that a candidate slot actually produces a note. Rampable/deferrable like any param. |
+| `min_gap` | `1` beat | `min_gap` | Spacing (in beats) between candidate slots — both the fastest possible note rate and the grid `probability` thins out. Rampable/deferrable, clamped to `0.0625..16`. |
+| `scale` | `0,2,4,5,7,9,11` | `scale` (option) | A comma-separated (or array) list of scale degrees a generated note's pitch is randomly picked from — resolved against the shared harmony context **at trigger time**, exactly like a manually `add_event`'d `degree=` (see [Events](#events) below). Runtime-settable option (`/rand1 scale=0,3,7`, applies from the next generated note) — not rampable. |
+
+```
+/add_track name=lead
+/add_modulator type=randomnotes name=rand1 probability=0.7 min_gap=0.5 scale=0,2,4,5,7,9,11
+/patch source=rand1 dest=lead.notes
+```
+
+Generation walks a `min_gap`-spaced grid of candidate beats forward forever
+(not tied to the loop, so it doesn't repeat identically every pass); at each
+slot, `probability` decides whether a note actually fires, and if so a random
+entry from `scale` becomes that note's `degree`. With the default chromatic
+harmony scale, `scale`'s numbers behave as plain semitone offsets from the
+harmony root — the default `0,2,4,5,7,9,11` is therefore a major scale.
 
 ## Events
 
@@ -126,13 +161,15 @@ Each event has:
 | `velocity` | `1` | 0–1, used as the note's peak gain. |
 | `duration` | `0.25` | In beats, not seconds — the clock converts using the current tempo at trigger time. |
 
-The harmony context (`root`/`scale`) currently defaults to chromatic — every
-semitone is in the scale — so `degree` behaves as a plain semitone offset from
-`root` (MIDI 60). There's no `/harmony` command yet to change the key/scale at
-runtime; that's a deferred piece of a larger scale/chord system. The point of
-resolving `degree` at trigger time rather than baking in a pitch when the
-event is authored is so that once real scale-switching exists, changing the
-key will retune a pattern that's already scheduled and playing.
+The harmony context (`root`/`scale`) defaults to chromatic — every semitone
+is in the scale — so `degree` behaves as a plain semitone offset from `root`
+(MIDI 60). Change either at runtime with `/harmony root=57
+scale=0,2,3,5,7,8,10` (see [commands.md](commands.md#top-level-commands)).
+Because `degree` resolves at trigger time rather than being baked in when
+the event is authored, changing the key/scale retunes every already-playing
+`degree=`-authored pattern (and every `randomnotes` stream) live, mid-loop —
+a chord/progression system on top of this is still future work, but the key
+and scale themselves are live controls today.
 
 ## Gain taper
 

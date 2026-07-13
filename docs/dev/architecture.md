@@ -9,31 +9,72 @@ exist during SSR).
 ## Interface tree
 
 ```
-routes/+layout.svelte              theme.css / reset.css, favicon — global chrome only
-routes/+page.svelte                just a link to /code-editor
-routes/code-editor/+page.svelte    owns the NLLC instance + executeCommand; top-level layout
-├── CodeEditor.svelte              text input + scrollback log; calls onCommand(text) prop;
-│                                   owns command history (↑/↓) and exposes insertAtCursor(text)
+routes/+layout.svelte                   theme.css / reset.css, favicon — global chrome only
+routes/+page.svelte                     links to both session routes below, plus an audio-options
+│                                         panel (output device / latency hint) that only ever writes
+│                                         to localStorage — this page never touches AudioContext itself
+routes/code-editor/+page.svelte         <SessionPage /> — a blank session
+routes/code-editor/demo/+page.svelte    <SessionPage demoSessionUrl="/sessions/demo.json" />
+SessionPage.svelte                      owns the NLLC instance + executeCommand; top-level layout
+├── CodeEditor.svelte                   text input + scrollback log; calls onCommand(text) prop;
+│                                        owns command history (↑/↓) and exposes insertAtCursor(text)
 └── Mixer.svelte  /  CollapsedRail.svelte    (toggled by a collapse arrow)
-    ├── Transport.svelte           engine on/off, clock LED, beat/bpm readout
+    ├── Transport.svelte           engine on/off, clock LED, beat/bpm readout,
+    │                               Save JSON/Load JSON buttons (run /save_json,/load_json
+    │                               via the same onRunCommand path CodeEditor's own submit uses)
+    ├── MixerSection.svelte        one per titled panel (Tracks/Buses/Master/Modulators) —
+    │                               collapse/resize chrome only; renders whatever's passed as children
     ├── MixerChannel.svelte        one per track, one per bus, plus one for master
     ├── ModulatorStrip.svelte      one per modulator (Modulators section)
     └── PatchList.svelte           every active patch cable, as a flat list
 ```
 
-`code-editor/+page.svelte` is the only place the `NLLC` instance and its
-`createCommandRouter`-produced `executeCommand`/`suggest` functions live;
-they're passed down as props (`onCommand`/`onSuggest` on `CodeEditor`). It
-also owns a `requestAnimationFrame` poll loop that diffs each of
-`nllc.tracks`, `nllc.buses`, `nllc.modulators`, and `nllc.patches` (by
-`.name`/`.name`/`.name`/`.id` respectively, joined into a string) to detect
-additions/removals — these are plain mutable arrays, not Svelte state, since
+`SessionPage.svelte` (`src/lib/components/code-editor/`) is the only place
+the `NLLC` instance and its `createCommandRouter`-produced
+`executeCommand`/`suggest` functions live; they're passed down as props
+(`onCommand`/`onSuggest` on `CodeEditor`). Both route pages are thin
+wrappers around it — a session route is never anything more than "which
+`demoSessionUrl`, if any, to hand it" — so the two routes can't drift apart
+in layout/polling logic, only in which JSON (if any) gets loaded once the
+engine exists. Neither route hand-authors demo content of its own anymore;
+`/code-editor/demo` just `fetch()`es `static/sessions/demo.json` and calls
+`session.js`'s `loadSession` on it once the engine's constructed — exactly
+what `/load_session` does with a picked file, minus the file picker (see
+`session.js` in [source-overview.md](source-overview.md#sessionjs)).
+`SessionPage` also owns a `requestAnimationFrame` poll loop that diffs each
+of `nllc.tracks`, `nllc.buses`, `nllc.modulators`, and `nllc.patches`
+against its own last copy **by element identity** (length + per-index
+`!==`), not by joined names/ids — loading a session whose names match
+what's already live (e.g. the same file twice) replaces every object with a
+fresh instance while leaving the name list byte-identical, and a name-based
+diff would keep the mixer bound to the torn-down originals — to detect
+additions/removals/replacements — these are plain mutable arrays, not Svelte state, since
 they're mutated from inside the DSP layer (`NLLC.createTrack`/`removeTrack`/
-`createBus`/`removeBus`/`createModulator`/etc.), not from component code.
-`MixerChannel.svelte` does the same trick for a channel's `processors` list,
-and needs no changes at all to also render a bus strip — it only ever reads
-`channel.gainNode`/`channel.pan`/`channel.processors`, all present on any
-`NLLCChannel` regardless of whether it has a `.source`.
+`createBus`/`removeBus`/`createModulator`/etc., and now also `loadSession`),
+not from component code. `MixerChannel.svelte` does the same trick for a
+channel's `processors` list, and needs no changes at all to also render a
+bus strip — it only ever reads `channel.gainNode`/`channel.pan`/
+`channel.processors`, all present on any `NLLCChannel` regardless of whether
+it has a `.source`.
+
+### Audio options: localStorage as the handoff, not a store
+
+The homepage's audio-options panel (output device via
+`navigator.mediaDevices.enumerateDevices()`/`AudioContext.setSinkId`,
+latency via `AudioContext`'s `latencyHint`) never touches an `AudioContext`
+itself — it can't, since `AudioContext`/`NLLC` are constructed per session
+page, not on the homepage. It writes two plain values to `localStorage`
+(`nllc:audioLatencyHint`, `nllc:audioOutputDeviceId`); `SessionPage` reads
+them once in `onMount`, before constructing `NLLC` (`latencyHint` is a
+constructor-time-only `AudioContext` option — see `nllc.js` — so it has to
+be read first), and applies the saved output device via `setSinkId` right
+after, feature-detected and best-effort (`.catch(() => {})`) so a browser
+without `setSinkId` support, or a since-unplugged device id, just falls back
+to the platform default instead of failing session startup. `localStorage`
+rather than a shared Svelte store or URL params is deliberate: the value
+needs to survive a full navigation to a different route (the homepage link
+click), and outlive the current tab, with no coordination required between
+pages that never run at the same time.
 
 Everything below `code-editor/+page.svelte` reads live values off the `NLLC`
 object's real Web Audio nodes directly (`channel.gainNode.gain.value`,
@@ -48,6 +89,39 @@ while the strip was still mounted, `nllc.removeTrack`/`removeModulator` already
 did a blanket `.disconnect()` that silently takes the tap connection down with
 it, so the specific `.disconnect(analyser)` in the component's own cleanup
 would otherwise throw on an already-severed connection.
+
+### Mixer layout: `MixerSection` as shared collapse/resize chrome
+
+`Mixer.svelte` composes four titled panels — Tracks, Buses, Master,
+Modulators — each wrapped in `MixerSection.svelte`, which owns nothing about
+*what* a panel shows (that's whatever's passed as its `children` snippet)
+and only the collapse/resize chrome around it, in one of two layouts:
+
+- **`"row"`** (Tracks, Buses, Master — sit side by side in `Mixer.svelte`'s
+  `.row`): a vertical (rotated) label beside a horizontally-stretching body.
+  `grow` (Tracks only) makes the body `flex: 1` instead of sizing to its own
+  content, so a long track list scrolls *inside* its own section instead of
+  forcing the whole row wider than the mixer pane and pushing Master onto a
+  second line underneath everything — the bug this shape specifically fixes.
+  `resizable` (Tracks, Buses — not Master, which is intentionally neither
+  resizable nor collapsible, so it's never accidentally hidden or squeezed
+  away) adds a drag handle; before the first drag a section sizes itself
+  normally (`flex:1` if `grow`, else content-sized up to `maxWidth`), and
+  dragging measures the live DOM width at that instant and locks it in as a
+  fixed pixel width going forward (at which point `grow` stops applying, so
+  an explicit width and `flex:1` don't fight).
+- **`"full"`** (Modulators, its own 100%-width row below `.row`): a
+  horizontal label above a full-width scrollable body. Never `resizable` — a
+  drag handle stacked below full-width content (rather than beside it, like
+  the row sections get) has nowhere sensible to live and just reads as a
+  stray control, so `Mixer.svelte` doesn't enable it there.
+
+Collapsing (either layout) hides only the body — the title stays visible
+always (rotated in `"row"`), so a collapsed section still reads as "this is
+what's hidden here" rather than a bare arrow with no context. `Master`'s own
+`MixerSection` is wrapped in a `margin-left: auto` div in `Mixer.svelte` so
+it hugs the row's right edge regardless of how much (or little) space
+Tracks/Buses currently take up.
 
 ### Click-to-paste: an imperative export, not another prop
 
@@ -78,30 +152,66 @@ both). `suggest(input, cursorPos)` wraps `commands.js`'s
 rather than attached as a property on `executeCommand` so both stay ordinary
 named values threaded down as two separate props (`onCommand`/`onSuggest`) to
 `CodeEditor.svelte`, instead of a function secretly carrying extra state.
-`suggestCompletion` only completes at the very end of the input (never
-mid-line) and only two token positions: the `/name` itself, or — once past
-it — a bare param key for whatever channel/processor/modulator that name
-resolves to. See
+`suggestCompletion` works at any cursor position within the input, not just
+the end (mid-line completion pushes later-in-the-line text over rather than
+only ever appending — see the rendering technique below), and completes
+three token shapes: the `/name` itself (`addressableNames` — any addressable
+object, then top-level commands); once past the name, a bare param *key*
+(`resolveKeywordsFor` → `channelKeywordsFor`/`paramObjectKeywordsFor`, each
+object's own `params` keys plus one of two small hand-maintained keyword
+lists for non-param commands); or, once a key's `=` is typed and **at least
+one character of its value follows**, the value itself, but only for keys
+with a small enumerable candidate list (`resolveValueCandidates` — a
+registered type name for `synth=`/`type=`/`add_processor=`, `"beat"`/
+`"cycle"` for `at=`, an existing object name for `out=`/`add_send=`/
+`source=`/`dest=`, an existing state/patch/send id, ...); an open-ended value
+(a number, a freshly-chosen name) is left alone. The empty-value guard is
+deliberate, not an oversight: without it, typing `type=` with nothing after
+it yet would "complete" to whichever candidate happens to be listed first
+(e.g. `lfo`, the first key in `MODULATOR_TYPES`) and, if Enter is pressed
+before typing anything further, silently create *that* instead of whatever
+was actually intended — the same guard the `/name`-token and bare-key
+branches already had (an empty partial there also returns no suggestion),
+just missing from the value branch until it was added. See
 [source-overview.md](source-overview.md#commandsjs) for the full breakdown
-of `addressableNames`/`resolveKeywordsFor`/`pickBestMatch`, and
+of `addressableNames`/`resolveKeywordsFor`/`resolveValueCandidates`/
+`pickBestMatch`, and
 [adding-commands.md](adding-commands.md#keeping-suggestions-in-sync) for
 what a new command needs to stay suggestible.
 
-`CodeEditor.svelte` renders the suggestion as inline "ghost text" using a
-technique that leans on the console already being monospace: a `.ghost` div
-sits in the same box as the real `<input>` (identical font/padding/border,
-both zeroed), containing the already-typed text in an invisible
-(`visibility: hidden`) span followed by the suggested remainder in a
-visibly-greyed span. The invisible span still occupies width, so the grey
-remainder lines up exactly where the real input's own text ends — because
-both elements use the same monospace font, that alignment holds
-character-for-character without needing to measure anything in JS. Recompute
-happens imperatively (`updateSuggestion(target)`, called from `oninput`/
-`onkeyup`/`onclick` on the input) rather than through a `$effect`, reading
-straight off the DOM event's own `target.value`/`selectionStart` instead of
-the `input` state variable — this sidesteps a possible one-keystroke race if
-Svelte's own `bind:value` listener and this component's listener don't fire
-in a guaranteed order for the same native event.
+`CodeEditor.svelte` renders the suggestion as inline "ghost text": a `.ghost`
+div sits in the same box as the real `<input>` (identical font/padding/
+border, both zeroed) and is the *only* layer that actually paints visible
+text — the real `<input>`'s own glyphs are made fully transparent
+(`color: transparent`, with `caret-color` kept so the blinking caret is still
+visible), and the ghost overlay composites three spans around wherever the
+suggestion's token sits: already-typed text before it, the dimmed suggested
+remainder, and already-typed text after it. Because both elements share the
+same monospace font, the overlay lines up with the real input
+character-for-character without measuring anything in JS. This (rather than
+an always-invisible span for typed text plus a visible one for the
+suggestion, which only ever worked for a suggestion appended at the very
+end) is specifically what makes mid-line completion possible: accepting a
+suggestion splices it into `suggestion.start..end` and the "after" span
+shifts over in the overlay to match, instead of a stale, un-shifted copy of
+that trailing text showing through from the real `<input>` underneath.
+Recompute happens imperatively (`updateSuggestion(target)`, called from
+`oninput`/`onkeyup`/`onclick` on the input) rather than through a `$effect`,
+reading straight off the DOM event's own `target.value`/`selectionStart`
+instead of the `input` state variable — this sidesteps a possible
+one-keystroke race if Svelte's own `bind:value` listener and this
+component's listener don't fire in a guaranteed order for the same native
+event.
+
+One CSS pitfall worth flagging since it already bit this feature once:
+Svelte's component-scoped CSS is scoped *per tag*, not per class — a bare
+`.input { color: transparent }` rule (meant only for the real `<input>`
+element) also matches a submitted command's own scrollback line, since
+`entry.type === "input"` gives that `<div>` the class `"line input"` too.
+Left unqualified, every echoed command silently disappears from the
+scrollback right after pressing Enter. The fix is qualifying the selector to
+the actual element (`input.input`), not just avoiding the name collision by
+luck.
 
 Right arrow accepts a showing suggestion into the input without submitting
 (`acceptSuggestion()`); Enter, when a suggestion is showing, accepts *and*
@@ -212,6 +322,28 @@ that still exposes a getter like `get wet()` (for use as an
 `NLLCAutomationEvent` target elsewhere in the codebase) does so as a thin
 delegate onto `this.params.wet.audioParam`, not a second implementation.
 
+**Options** are the non-rampable counterpart, with the same
+one-declaration-drives-everything philosophy: every synth/processor/
+modulator also exposes `this.options = { key: { get(), set(value),
+choices? } }` for runtime settings with no `AudioParam` behind them
+(`waveform`, `randomnotes`' `scale`, `NLLCReverb`'s `duration`/`decay` —
+whose `set` rebuilds the impulse response in place — `NLLCDelay`'s
+`stereoOffset`, `NLLCSampler`'s `samples`). `commands.js`'s
+`applyOptions()` is the one function that applies them (rejecting ramp
+specs — nothing to schedule — and validating against `choices`, which also
+drive ghost-text value completion); `help` lists them separately from
+params; and the base classes' `getOptions()` *derives* its session
+serialization from the same map (its keys match what the constructor
+accepts back), so a subclass declares an option exactly once and never
+overrides `getOptions()`. A track's synth's params/options are routed
+through the track's own console name by `channelCommand` (`/lead
+waveform=square`) — a synth is never separately addressable, its channel is
+its surface. One wrinkle `applyOptions` handles centrally: composite
+commands (`add_event`, `automate=`) claim generic keys (`beat=`,
+`duration=`, `from=`, `to=`) that can collide with an option's name
+(reverb's `duration`), so option application skips keys a composite in the
+same command already claimed.
+
 ### Modular patching
 
 `NLLCModulator` (`modulator.js`, e.g. `NLLCLFO`) is structurally a processor's
@@ -240,11 +372,62 @@ must run *before* the object's own node teardown, since a patch's own
 if that exact connection was already severed by a blanket `.disconnect()`
 first.
 
-Deliberately out of scope so far (see `ideas.md`/session notes rather than
-code): a modulator or patch that generates *events* rather than a continuous
-control signal (for algorithmic melody/rhythm) — building that would need an
-"event input" concept on `NLLCSynth` alongside its manually-authored `events`
-array, which hasn't been designed yet.
+### Event-generating modulators: the discrete counterpart to a patch
+
+`NLLCPatch` above is one shape of "connect a source somewhere else" — a
+continuous signal into an `AudioParam`. The other shape, for a modulator that
+generates discrete *notes* rather than a signal (e.g. `NLLCRandomNotes` —
+`modulators/randomnotes.js`), is `NLLCEventPatch`, deliberately kept as a
+separate, simpler class rather than shoehorned into `NLLCPatch`: there's no
+`depthGain` node, no `AudioParam` connection at all, and no `depth` param —
+just bookkeeping (`sourceObject`/`destObject`/`sourceName`/`destName`, an
+`id`) plus one side effect its constructor performs: pushing `destObject`
+(a channel, not its synth directly — see below) onto
+`sourceObject.eventDestinations`, an array the source modulator itself owns.
+`disconnect()` is the inverse — splice it back out.
+
+The clock is what actually moves notes along this "cable." `NLLCClock`'s
+uniform per-unit contract (`events`/`automation`/`trigger()`/`active`) gains
+one more optional, duck-typed member: a unit exposing
+`generateEvents(fromBeat, toBeat)` is asked, every tick, for whatever
+`NLLCEvent`s it wants to fire in that range — but unlike a synth's `events`
+array (matched against a *loop-relative* beat position, since a pattern
+repeats every `loopLengthBeats`), `generateEvents` is handed an **absolute**,
+non-looping beat range (`loopBeatStart + rangeStart`/`rangeEnd`, the exact
+sub-range `_scheduleRange` already slices per loop iteration for its own
+bookkeeping — reused here for its "correctly tiles a lookahead window with no
+gaps or overlaps across ticks" property, not because generation cares about
+loop boundaries at all). This is what lets `NLLCRandomNotes` track state like
+"beats since the last note" (`_nextCandidateBeat`) that advances forever
+instead of resetting every pass through the loop — the entire reason this
+needed to be a new hook rather than reusing the existing `events`-array
+mechanism, which assumes a fixed, repeating pattern. For each generated
+event, the clock computes its `AudioContext` time and calls
+`destination.source.trigger(time, event, secondsPerBeat)` — the *exact* same
+method a manually-`add_event`'d note triggers through — for every channel in
+`unit.eventDestinations`, skipping any whose synth is currently paused
+(`destination.source.active === false`, mirroring how a paused synth's own
+authored events already stop scheduling). One generated stream can feed
+several destinations at once, the discrete analogue of one LFO signal
+patched into several params at different depths.
+
+`eventDestinations` stores the **channel** (a track), not its `.source`
+synth directly, specifically so a `.notes` patch survives a `synth=` swap —
+the same property a `track_1.gain` patch already has, since gain also lives
+on the channel rather than the synth. `nllc.js`'s `createPatch` branches on
+this at creation time: a `destName` ending in `.notes` (a reserved,
+non-`AudioParam` pseudo-param, never a key in any object's real `params`
+map) routes to `_createEventPatch` instead of the normal `_resolveDest`
+path, which validates the source actually has a `generateEvents` method
+(duck-typed, not an `instanceof` check — any future event-generating
+modulator qualifies automatically) and the destination channel actually has
+a `.source` (rejecting master/a bus with a clear error, rather than silently
+creating a patch that can never deliver anything).
+
+Session save/load and `/recall` treat an event patch as just another patch
+with no `depth` to serialize/ramp — `session.js`'s `serializePatch`/
+`reconcilePatches` both check `patch.params.depth` before touching it, since
+an `NLLCEventPatch`'s `params` is `{}`.
 
 ### Harmony context
 
@@ -255,11 +438,13 @@ carry `degree` instead of (or alongside) `pitch`; a pitched synth (`oscsynth`)
 resolves `degree` against `this.harmony` inside `trigger()` — i.e. at the
 moment the note actually sounds, not when the event was authored. This is
 deliberate: since every synth holds a *reference* to the same context object,
-mutating its fields in place (once a `/harmony` command exists to do so) would
-retune every pattern using `degree`, live, without touching a single event.
-Today `scale` defaults to chromatic (`[0..11]`), so `degree` behaves as a
-plain semitone offset — the hook is built, but real scale/chord logic and the
-runtime command to change key are deliberately deferred.
+mutating its fields in place — which is exactly what the `/harmony [root=]
+[scale=]` command does — retunes every pattern using `degree`, live, without
+touching a single event. `scale` defaults to chromatic (`[0..11]`), so
+`degree` behaves as a plain semitone offset until `/harmony scale=` narrows
+it (`parseDegreeList` in `harmony.js` validates the list — shared with
+`NLLCRandomNotes`' `scale` option, so the two can't drift). Chord/
+progression logic on top of this remains future work.
 
 ### The clock is a lookahead scheduler over "units"
 
@@ -268,20 +453,20 @@ runtime command to change key are deliberately deferred.
 channels (tracks/master), processors, *and* modulators all get registered as units:
 
 - A synth's `events` are note-like `NLLCEvent`s; its `trigger()` makes sound.
-- A channel's or processor's `automation` is `NLLCAutomationEvent`s (parameter
-  ramps, e.g. a fade-in on `track.volume` or an opening reverb `wet`); these
-  (and modulators, which register but currently have no `events`/`automation`
-  of their own — see below) don't implement `trigger()` themselves — the clock
-  schedules automation directly via `scheduleAutomationEvent()`, keyed off the
-  same `unit.automation` array shape.
+- A channel's, processor's, or modulator's `automation` is
+  `NLLCAutomationEvent`s (parameter ramps, e.g. a fade-in on `track.volume`
+  or an opening reverb `wet` — authored via the console's `automate=`
+  command, see [Two ramp-scheduling paths](#two-ramp-scheduling-paths-one-curve-implementation));
+  these don't implement `trigger()` themselves — the clock schedules
+  automation directly via `scheduleAutomationEvent()`, keyed off the same
+  `unit.automation` array shape.
 
 `NLLC.createTrack` registers **two** units for one track: the synth (`source`) and
 the `NLLCTrack` itself, because they have independent `events`/`automation` lists
 (a synth's notes vs. the track's own volume/pan automation). A modulator
-registers as one unit (mainly so a future loop-position pattern automation on
-its own params, e.g. an LFO's `freq` sweeping over a pattern, would work for
-free via the same `unit.automation` mechanism — nothing currently populates
-that for a modulator).
+registers as one unit — its own params ride the same `unit.automation`
+mechanism (`/lfo1 automate=freq to=12 beat=3 duration=0.5` sweeps an LFO's
+rate at a loop position, exactly like a processor param).
 
 Scheduling runs via `setTimeout`, not `requestAnimationFrame` (so it keeps ticking
 in a background tab): every `lookaheadMs` (25ms) it looks `scheduleAheadTime`
@@ -303,6 +488,14 @@ right after, so the whole engine going permanently silent from one bad command
 is never possible. `commands.js`'s `toNumber()` is the first line of defense
 (reject bad input before it's ever applied); this is the second, structural
 one.
+
+`start()` also calls `unit.onClockStart?.()` on every registered unit (a
+third optional, duck-typed hook alongside `trigger()`/`generateEvents()`):
+a clock (re)start rewinds the absolute beat position to 0, so a unit
+holding its own absolute-beat state — `NLLCRandomNotes`' candidate-grid
+cursor is the one current example — must reset it there, or a `/stop`
+`/start` would strand it at the pre-stop beat number, silently generating
+nothing until the clock caught back up.
 
 Both `bpm` and `loopLengthBeats` are runtime-mutable. `setBpm` is glitch-free —
 it rebases `startTime` so the current playback beat doesn't jump — and also
@@ -332,6 +525,18 @@ Two exported functions call into it for two different use cases:
 - `scheduleAutomationEvent(time, event, secondsPerBeat)` — the clock calls this
   directly for `NLLCAutomationEvent`s sitting in a unit's `.automation` array,
   matched against loop-relative beat position the same way `events` are.
+  These are authored from the console: `automate=<param> to= [from= beat=
+  duration= curve= once]` on any channel (gain/pan), processor, or
+  modulator (all three own an `.automation` array — `NLLCModulator` grew
+  one for this), with `automations`/`remove_automation=<n>`/
+  `clear_automation` for inspection/removal. A console-authored event
+  records the `paramKey` it targets, which is what lets `session.js`
+  serialize automation by param name (`serializeAutomation`/
+  `rebuildAutomation`) — from/to stored as user-facing (decoded) values,
+  re-encoded on rebuild — so loop automation survives `/save`/`/recall`
+  and session files. An event built in code against a bare `AudioParam`
+  (no `paramKey`) is skipped by serialization; a rebuilt `once` event
+  fires once more after a load/recall.
 - `scheduleRamp(audioContext, param, from, to, durationSeconds, { startTime,
   curve })` — called by `commands.js`'s `applyParams()`, **not** registered
   with the clock at all. This is the vehicle for console ramps (`/track_1
@@ -345,10 +550,44 @@ Two exported functions call into it for two different use cases:
   "current beat", handling the engine-not-started case) for no benefit.
 
 A plain (non-ramped) instant set given `at=beat`/`at=cycle` uses
-`commands.js`'s `setInstant()` instead — `cancelScheduledValues` +
+`automation.js`'s `setInstant()` instead — `cancelScheduledValues` +
 `setValueAtTime` at the resolved future time, rather than a direct `.value =`
 assignment — so "jump to this value on the next beat" is possible without
-needing a ramp duration at all.
+needing a ramp duration at all. `commands.js`'s `applyParams` and
+`session.js`'s `applySnapshot` (below) both call into it, rather than each
+keeping its own copy.
+
+### A third path: structural reconciliation for `/recall`
+
+`session.js`'s `applySnapshot(nllc, snapshot, { startTime, durationSeconds })`
+— the engine behind `/recall` — adds a third scheduling path alongside the
+two above, for a case neither covers: changing *which objects exist*, not
+just a param's value. Ramping/instant-setting a param rides native
+`AudioParam` scheduling either way (via `scheduleRamp`/`setInstant`), so a
+matched track/processor/modulator/patch's params are scheduled exactly like
+a console ramp would be. But creating or removing a track, reordering a
+channel's processor chain, or tearing down a patch once its depth has faded
+to 0 are JS-side object-graph changes with no `AudioParam` equivalent to
+ride — the same problem `NLLCClock.rampBpm` already has for tempo (see
+above), solved the same way: deferred via a plain `setTimeout` computed from
+`startTime` rather than scheduled sample-accurately. Since scheduling a
+future `AudioParam` value doesn't require the target node to already be
+connected into the graph — only to exist and be connected by the time the
+scheduled moment actually arrives — a newly-created object's param ramps can
+still be scheduled immediately (in the same tick that creates it inside that
+`setTimeout` callback), so a fade-in still starts precisely on time even
+though the object's own creation is only approximately on time.
+
+This is also why `/recall` is careful about *what* fades: an object present
+in both the live session and the target snapshot never gets recreated (it
+keeps its identity and just has its params ramped), an object only in the
+snapshot is created immediately and has its gain/depth ramped up from 0, and
+an object only live has its gain/depth ramped down to 0 first and is only
+actually torn down once that fade completes — never a hard cut mid-ramp.
+`session.js`'s `loadSession` (whole-session file load, `/load_session`)
+deliberately does none of this — it's a hard rebuild, since loading an
+entirely different session from disk is a cold-start operation with no
+"previous state" worth crossfading from.
 
 ## Command router as a third view
 
@@ -374,9 +613,20 @@ to run. The full-help builders list available `synth=`/`add_processor=`/
 `PROCESSOR_TYPES`/`MODULATOR_TYPES` registries) rather than hardcoding the
 list, so a new registered type shows up in help automatically. A param's
 range is only printed when `NLLCParam.min`/`max` are actually finite
-(`formatParamLine`) — several existing params (e.g. `NLLCReverb.wet`,
-`NLLCLFO.freq`) were never given bounds, and printing `-Infinity..Infinity`
-for those would be noise, not information.
+(`formatParamLine`) — a param without declared bounds (e.g. `NLLCPatch`'s
+`depth`, deliberately unbounded so a negative depth can invert a
+modulation) would otherwise print `-Infinity..Infinity`, which is noise,
+not information.
+
+Dispatch order also means the `/name` namespace is genuinely flat:
+`nllc.js`'s `_uniqueName` de-duplicates a new object's name against every
+existing object of *every* kind plus `RESERVED_NAMES` (every top-level
+command name and `master`, exported from `nllc.js`), so nothing can be
+created already shadowed by an earlier lookup. `createCommandRouter`
+sanity-checks its own command keys against `RESERVED_NAMES` when built
+(once per page) and `console.warn`s about any command missing from it — the
+one thing to remember when adding a new top-level command (see
+[adding-commands.md](adding-commands.md)).
 
 ## Why this shape
 

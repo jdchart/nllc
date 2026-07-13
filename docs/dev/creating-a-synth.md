@@ -106,16 +106,44 @@ for standalone use) — you don't need to do anything to receive it. Skip this
 entirely if `pitch` doesn't mean "MIDI note" for your synth (e.g. `sampler`
 treats it as a slot index and never resolves `degree`).
 
+## Optional: runtime options (settable, not rampable)
+
+For a runtime setting that isn't backed by any `AudioParam` (like
+`NLLCOscSynth`'s `waveform`), store it on `this` in the constructor and
+declare it in `this.options` — `{ key: { get(), set(value), choices? } }`:
+
+```js
+this.options = {
+    waveform: {
+        get: () => this.waveform,
+        set: (value) => { this.waveform = value; },
+        choices: ["sine", "square", "sawtooth", "triangle"],
+    },
+};
+```
+
+One declaration buys everything: `channelCommand` routes it through the
+track's own name (`/track_1 waveform=square` — a synth is never separately
+addressable, its channel is its surface), `help` lists it under "synth
+params/options", ghost-text completes its value from `choices`, a ramp spec
+on it is cleanly rejected (options aren't rampable), and `session.js`
+round-trips it — the base `getOptions()` derives its result from this map
+(the same keys your constructor accepts back), so **don't override
+`getOptions()` anymore**. `set()` may validate and throw; the message
+surfaces as a per-key console error without aborting the rest of the
+command.
+
 ## Optional: runtime params
 
-`NLLCSynth.params` starts as `{}` and neither existing synth subclass overrides it
-— today, synth-level configuration (like `NLLCOscSynth`'s `waveform`) is only
-settable via constructor options, reachable through `/add_track synth=oscsynth
-waveform=square` (not through `/track_1 synth=...`, which only forwards the type —
-see [user/commands.md](../user/commands.md)). If you want a synth parameter
-adjustable at runtime the same way `NLLCReverb`'s `wet` is, populate
-`this.params` with `NLLCParam`s the same way a processor does (see
-[creating-a-processor.md](creating-a-processor.md) and `param.js`) —
-`channelCommand` in `commands.js` would need a small addition to actually
-apply `channel.source.params` through `applyParams()` the way
-`paramObjectCommand` does for processors/modulators — it doesn't today.
+`NLLCSynth.params` starts as `{}` and neither existing synth subclass
+populates it — both synths' runtime surface is currently options (above).
+If your synth has a genuinely rampable, `AudioParam`-backed value (a filter
+cutoff, say), populate `this.params` with `NLLCParam`s the same way a
+processor does (see [creating-a-processor.md](creating-a-processor.md) and
+`param.js`) — `channelCommand` already routes `channel.source.params`
+through `applyParams()`, so `/track_1 cutoff=800 2b` (ramping, `at=`
+deferral, patching via `track_1.cutoff`... no wait — patch destinations
+resolve against the *channel's* params only) works with no `commands.js`
+change. Note a patch destination (`/patch dest=track_1.cutoff`) resolves
+against the channel's own `params` map, not the synth's — patching into a
+synth param isn't wired up today.

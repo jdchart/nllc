@@ -22,6 +22,8 @@ These are a set of pre-configured tasks you are capable of doing upon the user's
 - `.claude/tasks/code_review.md` : perform a comprehensive revie of the code base, looking for bugs, inconsistencies, and optimizations.
 - `.claude/tasks/write_documentation.md` : you will create or update documentation files for the project for users, developers and LLMs.
 - `.claude/tasks/synth_creation.md` : create a new synth object for the environment.
+- `.claude/tasks/processor_creation.md` : create a new processor object for the environment.
+- `.claude/tasks/modulator_creation.md` : create a new modulator object for the environment.
 
 ## Perform user request
 The user will most probably want to do something else very specific. Here are some instructions and dos and don't for responding to these requests:

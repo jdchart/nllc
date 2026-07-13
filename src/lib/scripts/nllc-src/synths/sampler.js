@@ -24,6 +24,34 @@ export class NLLCSampler extends NLLCSynth {
         super(audioContext, { name });
         this.llm_summary = "A sample player: each event's pitch selects one of a fixed set of loaded sample slots to trigger (0 = first slot, wrapping if out of range).";
 
+        this._setSamples(samples);
+
+        // Runtime-settable — /drums samples=kick02.wav,hat13.wav swaps the
+        // slot list live (slots empty-then-fill as each file loads, same
+        // fire-and-forget rule as construction). Kept as the original
+        // filename list (slots only store derived display names/URLs) so
+        // the base getOptions() round-trips it for sessions.
+        this.options = {
+            samples: {
+                get: () => this.samples,
+                set: (value) => {
+                    const list = Array.isArray(value) ? value : String(value).split(",").map((s) => s.trim());
+                    if (list.length === 0 || list.some((s) => !s)) {
+                        throw new Error(`invalid samples "${value}" — expected a comma-separated list of filenames under static/samples`);
+                    }
+                    this._setSamples(list);
+                },
+            },
+        };
+    };
+
+    // Shared by the constructor and the `samples` option above: replaces the
+    // slot list and kicks off (re)loading. Fire-and-forget: nothing awaits
+    // `_loaded`, so a trigger for a slot whose buffer hasn't finished
+    // loading yet silently does nothing (see trigger()'s
+    // `if (!slot?.buffer) return`) rather than queuing.
+    _setSamples(samples) {
+        this.samples = samples;
         this.slots = samples.map((filename) => ({
             name: sampleName(filename),
             // filenames contain spaces, so they must be URL-encoded to be
@@ -31,9 +59,6 @@ export class NLLCSampler extends NLLCSynth {
             url: `/samples/${encodeURIComponent(filename)}`,
             buffer: null,
         }));
-        // Fire-and-forget: nothing awaits `_loaded`, so a trigger for a slot
-        // whose buffer hasn't finished loading yet silently does nothing
-        // (see trigger()'s `if (!slot?.buffer) return`) rather than queuing.
         this._loaded = this._loadAll();
     };
 

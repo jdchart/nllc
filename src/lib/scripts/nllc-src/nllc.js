@@ -6,7 +6,8 @@ import { NLLCDelay } from "./processors/delay";
 import { NLLCOscSynth } from "./synths/oscsynth";
 import { NLLCSampler } from "./synths/sampler";
 import { NLLCLFO } from "./modulators/lfo";
-import { NLLCPatch } from "./patch";
+import { NLLCRandomNotes } from "./modulators/randomnotes";
+import { NLLCPatch, NLLCEventPatch } from "./patch";
 import { createHarmonyContext } from "./harmony";
 
 // String-keyed registries that map a command/UI-facing type name to a class.
@@ -27,7 +28,22 @@ const SYNTH_TYPES = {
 
 const MODULATOR_TYPES = {
     lfo: NLLCLFO,
+    randomnotes: NLLCRandomNotes,
 };
+
+// Every name the console router dispatches before it ever looks at objects:
+// the top-level commands (see commands.js, which sanity-checks itself against
+// this list at router build time) plus "master". An object created with one
+// of these names would be permanently unaddressable (the router finds the
+// command/master first), so _uniqueName treats them as taken and de-duplicates
+// past them, exactly like a name collision with an existing object.
+export const RESERVED_NAMES = new Set([
+    "start", "stop", "add_track", "tracks", "add_bus", "buses", "clock",
+    "harmony", "add_modulator", "modulators", "patch", "unpatch", "patches",
+    "save", "recall", "remove_state", "states",
+    "save_session", "save_json", "load_session", "load_json",
+    "master", "help",
+]);
 
 // The top-level owner: one instance per page. Holds the AudioContext, the
 // clock, the master bus, and every track/processor, and is the only place
@@ -35,8 +51,16 @@ const MODULATOR_TYPES = {
 // command router (commands.js) and the Svelte UI operate on one shared NLLC
 // instance rather than their own copies of this state.
 export class NLLC {
-    constructor() {
-        this.audioContext = new AudioContext();
+    // `latencyHint` is the one AudioContext construction option worth
+    // exposing this early — "interactive" (the browser default, and this
+    // class's own default) favors the lowest latency at the cost of more
+    // CPU; "playback" accepts higher latency for fewer glitches; "balanced"
+    // sits between the two. Threaded through from the homepage's audio-options panel
+    // (see routes/+page.svelte), read out of localStorage by SessionPage.svelte
+    // before constructing this — can't be changed after construction, since
+    // the Web Audio spec only accepts it at AudioContext creation time.
+    constructor({ latencyHint = "interactive" } = {}) {
+        this.audioContext = new AudioContext({ latencyHint });
         // Some browsers grant AudioContext a running start if page navigation
         // counted as a user gesture, even though nothing has called start()
         // yet. Force it suspended so the UI's off-by-default state is honest.
@@ -54,6 +78,11 @@ export class NLLC {
         this.modulators = [];
         this.patches = [];
         this._patchIdCounter = 0;
+
+        // Named full-session snapshots captured by /save and applied by
+        // /recall (see session.js) — persisted as part of the session JSON
+        // too, so a saved session's states survive a save/load round trip.
+        this.states = {};
 
         // One shared context every synth resolves NLLCEvent.degree against
         // (see harmony.js) — mutate its fields in place (once a /harmony
@@ -95,14 +124,37 @@ export class NLLC {
         this.running = false;
     };
 
-    // Appends "_2", "_3", ... to `base` until it no longer collides with
-    // `existingNames`. Used to keep both track names and processor names
-    // unique within their own namespace (independently of each other).
-    _uniqueName(base, existingNames) {
-        if (!existingNames.includes(base)) return base;
+    // Every name currently addressable as /name (excluding "master", which
+    // lives in RESERVED_NAMES) — tracks, buses, processors, and modulators
+    // share ONE namespace, since the console router dispatches a bare /name
+    // against all four kinds in order and a duplicate across kinds would
+    // leave the later one permanently shadowed.
+    _allNames() {
+        return new Set([
+            ...this.tracks.map((t) => t.name),
+            ...this.buses.map((b) => b.name),
+            ...this.processors.map((p) => p.name),
+            ...this.modulators.map((m) => m.name),
+        ]);
+    };
+
+    // Validates `base` as an addressable name (must parse as a /name token,
+    // and must not contain "." — a patch destination is "name.param", so a
+    // dot inside a name would break _resolveDest), then appends "_2", "_3",
+    // ... until it collides with neither an existing object of ANY kind nor
+    // a reserved top-level command name (see RESERVED_NAMES above).
+    _uniqueName(base) {
+        base = String(base);
+        if (!/^[a-zA-Z_]\w*$/.test(base)) {
+            throw new Error(`invalid name "${base}" — letters, digits, and _ only, starting with a letter or _`);
+        }
+
+        const taken = this._allNames();
+        const isTaken = (name) => taken.has(name) || RESERVED_NAMES.has(name);
+        if (!isTaken(base)) return base;
 
         let i = 2;
-        while (existingNames.includes(`${base}_${i}`)) i++;
+        while (isTaken(`${base}_${i}`)) i++;
         return `${base}_${i}`;
     };
 
@@ -115,7 +167,11 @@ export class NLLC {
             throw new Error(`unknown synth type "${type}"`);
         }
 
-        return new SynthClass(this.audioContext, { ...options, harmony: this.harmony });
+        const synth = new SynthClass(this.audioContext, { ...options, harmony: this.harmony });
+        // Recorded so session.js can serialize "which registry key built
+        // this" — the registry itself only maps that key to a class, forward.
+        synth.type = type;
+        return synth;
     };
 
     // Creates a fully-wired track: a unique name, a synth (default
@@ -123,7 +179,7 @@ export class NLLC {
     // and registered with the clock as two separate units (the synth for its
     // own events, the track itself for its own automation — see clock.js).
     createTrack(options = {}) {
-        const name = this._uniqueName(options.name ?? "track", this.tracks.map((t) => t.name));
+        const name = this._uniqueName(options.name ?? "track");
 
         // The synth keeps its own type-based name (e.g. "oscsynth", "sampler")
         // rather than inheriting the track's name — "name"/"synth"/"out" here
@@ -151,7 +207,7 @@ export class NLLC {
     // or a sub-mix of several tracks) — see commands.js's /add_bus and
     // channelCommand's out=/add_send=/remove_send=.
     createBus(options = {}) {
-        const name = this._uniqueName(options.name ?? "bus", this.buses.map((b) => b.name));
+        const name = this._uniqueName(options.name ?? "bus");
         const bus = new NLLCChannel(this.audioContext, { name });
 
         const destName = options.out ?? "master";
@@ -189,9 +245,12 @@ export class NLLC {
             throw new Error(`unknown processor type "${type}"`);
         }
 
-        const name = this._uniqueName(options.name ?? type, this.processors.map((p) => p.name));
+        const name = this._uniqueName(options.name ?? type);
         const processor = new ProcessorClass(this.audioContext, { ...options, name });
         processor.id = `p${++this._processorIdCounter}`;
+        // See createSynth's `synth.type` for why this is recorded here rather
+        // than reverse-derived from the registry (see session.js).
+        processor.type = type;
 
         this.processors.push(processor);
         this.clock.addUnit(processor);
@@ -283,8 +342,11 @@ export class NLLC {
             throw new Error(`unknown modulator type "${type}"`);
         }
 
-        const name = this._uniqueName(options.name ?? type, this.modulators.map((m) => m.name));
+        const name = this._uniqueName(options.name ?? type);
         const modulator = new ModulatorClass(this.audioContext, { ...options, name });
+        // See createSynth's `synth.type` for why this is recorded here rather
+        // than reverse-derived from the registry (see session.js).
+        modulator.type = type;
 
         this.modulators.push(modulator);
         this.clock.addUnit(modulator);
@@ -301,6 +363,11 @@ export class NLLC {
 
         this._removePatchesReferencing(modulator);
         modulator.output.disconnect();
+        // Duck-typed, like generateEvents — most modulators (e.g. NLLCLFO)
+        // own nothing beyond `.output`; NLLCRandomNotes also owns a couple of
+        // internal nodes routed straight to audioContext.destination (see its
+        // own dispose() for why) that this alone wouldn't reach.
+        modulator.dispose?.();
 
         this.modulators.splice(index, 1);
         this.clock.removeUnit(modulator);
@@ -344,11 +411,20 @@ export class NLLC {
 
     // Creates one "patch cable": sourceName is any addressable object (a
     // modulator, but also a track/master/processor, whose .output can double
-    // as a CV source); destName is "name.param" as resolved by _resolveDest.
-    // depth is the patch's own attenuator, independent of both endpoints.
+    // as a CV source); destName is "name.param" as resolved by _resolveDest —
+    // or "name.notes" (see _createEventPatch below), the discrete counterpart
+    // for an event-generating modulator (e.g. randomnotes) feeding a synth's
+    // control input instead of a continuous AudioParam. depth is the regular
+    // patch's own attenuator, independent of both endpoints; an event patch
+    // has no depth (see NLLCEventPatch).
     createPatch({ sourceName, destName, depth = 1 }) {
         const sourceObject = this._resolveObject(sourceName);
         if (!sourceObject) throw new Error(`unknown patch source "${sourceName}"`);
+
+        if (destName.endsWith(".notes")) {
+            return this._createEventPatch(sourceObject, sourceName, destName);
+        }
+
         if (!sourceObject.output) throw new Error(`"${sourceName}" has no output to patch from`);
 
         const { object: destObject, param: destParam } = this._resolveDest(destName);
@@ -361,6 +437,42 @@ export class NLLC {
             destName,
             destParam,
             depth,
+        });
+
+        this.patches.push(patch);
+        return patch;
+    };
+
+    // The ".notes" branch of createPatch: sourceObject must generate events
+    // (duck-typed — see NLLCRandomNotes.generateEvents), and destName's
+    // object part must be a channel with a synth (a track). destObject is the
+    // channel itself, not its synth directly, so the patch survives a synth=
+    // swap — same property a gain/pan patch already has.
+    _createEventPatch(sourceObject, sourceName, destName) {
+        if (typeof sourceObject.generateEvents !== "function") {
+            throw new Error(`"${sourceName}" doesn't generate events — only an event-generating modulator (e.g. type=randomnotes) can patch into ".notes"`);
+        }
+
+        const channelName = destName.slice(0, -".notes".length);
+        const destObject = this._resolveObject(channelName);
+        if (!destObject?.source) {
+            throw new Error(`"${channelName}" has no synth to receive notes`);
+        }
+
+        // A duplicate cable here isn't additive the way two NLLCPatch cables
+        // into the same param are (two depths summing is legit modular
+        // routing) — it would just deliver every generated note twice to the
+        // same synth, which reads as a bug, not a patch.
+        if (sourceObject.eventDestinations.includes(destObject)) {
+            throw new Error(`"${sourceName}" is already patched into "${channelName}.notes"`);
+        }
+
+        const patch = new NLLCEventPatch({
+            id: `x${++this._patchIdCounter}`,
+            sourceObject,
+            sourceName,
+            destObject,
+            destName,
         });
 
         this.patches.push(patch);

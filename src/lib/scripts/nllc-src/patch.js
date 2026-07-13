@@ -44,3 +44,36 @@ export class NLLCPatch {
         this.depthGain.disconnect(this.destParam);
     };
 };
+
+// The discrete counterpart to NLLCPatch: connects an event-generating
+// modulator (one exposing generateEvents() — see NLLCRandomNotes) into a
+// track's synth, rather than a continuous signal into an AudioParam. There's
+// no native Web Audio node to wire up (nothing is audio-rate here), so this
+// is pure bookkeeping — the clock reads sourceObject.eventDestinations
+// directly on every tick (see clock.js) to know where to deliver whatever
+// generateEvents() just produced.
+//
+// destObject is the *channel* (a track), not its synth directly, so the
+// patch keeps working across a synth= swap — same property NLLCPatch already
+// has for gain/pan (both live on the channel, not the synth). No `depth`:
+// unlike an AudioParam patch, there's nothing here to attenuate — the
+// modulator's own params (e.g. probability) already shape what it generates,
+// and the same generated stream reaches every destination this modulator is
+// patched into, exactly like one LFO signal feeding several depths.
+export class NLLCEventPatch {
+    constructor({ id, sourceObject, sourceName, destObject, destName }) {
+        this.id = id;
+        this.sourceObject = sourceObject;
+        this.sourceName = sourceName;
+        this.destObject = destObject;
+        this.destName = destName;
+        this.params = {};
+
+        sourceObject.eventDestinations.push(destObject);
+    };
+
+    disconnect() {
+        const index = this.sourceObject.eventDestinations.indexOf(this.destObject);
+        if (index !== -1) this.sourceObject.eventDestinations.splice(index, 1);
+    };
+};

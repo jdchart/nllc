@@ -19,5 +19,29 @@ export class NLLCModulator {
         // Generic command-line introspection surface, same shape as
         // NLLCProcessor.params: { paramName: { get(), set(value) } }.
         this.params = {};
+
+        // Non-rampable runtime settings — see NLLCSynth.options for the
+        // shape and what one declaration here buys.
+        this.options = {};
+
+        // Loop-position pattern automation on this modulator's own params
+        // (e.g. an LFO's freq sweeping over the loop) — same array shape
+        // every channel/processor unit already has; the clock schedules it
+        // identically (see clock.js). Populated by the console's automate=
+        // command (commands.js).
+        this.automation = [];
+    };
+
+    addAutomation(event) {
+        this.automation.push(event);
+        return event;
+    };
+
+    // Derived from the `options` map above — see NLLCSynth.getOptions; same
+    // idea, used by session.js.
+    getOptions() {
+        const out = {};
+        for (const [key, option] of Object.entries(this.options)) out[key] = option.get();
+        return out;
     };
 };

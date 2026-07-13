@@ -31,6 +31,10 @@ export class NLLCDistortion extends NLLCProcessor {
         super(audioContext, { name });
         this.llm_summary = "A simple waveshaper distortion.";
 
+        // Not a runtime param (no AudioParam behind it) — exposed as a
+        // runtime *option* below instead.
+        this.amount = amount;
+
         this.shaper = audioContext.createWaveShaper();
         this.shaper.curve = buildCurve(amount);
 
@@ -43,6 +47,20 @@ export class NLLCDistortion extends NLLCProcessor {
 
         this.params = {
             wet: new NLLCParam(this.wetGain.gain),
+        };
+
+        // Runtime-settable option: /distortion amount=0.8 rebuilds the
+        // curve in place. Round-tripped by the base getOptions().
+        this.options = {
+            amount: {
+                get: () => this.amount,
+                set: (value) => {
+                    const num = Number(value);
+                    if (!Number.isFinite(num) || num <= 0) throw new Error(`invalid amount "${value}"`);
+                    this.amount = num;
+                    this.shaper.curve = buildCurve(num);
+                },
+            },
         };
     };
 };
@@ -99,6 +117,22 @@ Points worth noting, all copied from `processors/reverb.js`/`processors/delay.js
   do. This is a thin alias, not a second implementation, so it can never
   drift out of sync with `params.wet` the way two independently-hand-written
   accessors could.
+
+## Optional: runtime options (settable, not rampable)
+
+For a setting that isn't a real `AudioParam` (like `amount` above, or
+`NLLCReverb`'s `duration`/`decay`, which regenerate the impulse response),
+declare it in `this.options` — `{ key: { get(), set(value), choices? } }`,
+as `NLLCDistortion.amount` does above. One declaration makes it
+console-settable at runtime (`/distortion amount=0.8`; a ramp spec is
+cleanly rejected), lists it in `help` under "options", and lets
+`session.js` reconstruct an equivalent processor on
+`/load_session`/`/recall` — the base `getOptions()` derives its result from
+this map (the same keys the constructor accepts back), so don't override
+it. `set()` may validate and throw; the message surfaces as a per-key
+console error. Every `NLLCParam` in `this.params` already round-trips on
+its own; options are only for the rest. See
+[architecture.md](architecture.md#a-third-path-structural-reconciliation-for-recall).
 
 ## Registering it
 

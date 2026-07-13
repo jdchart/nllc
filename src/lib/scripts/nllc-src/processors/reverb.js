@@ -26,8 +26,41 @@ export class NLLCReverb extends NLLCProcessor {
         super(audioContext, { name });
         this.llm_summary = "A simple algorithmic reverb: convolution against a generated impulse response, added on top of the dry signal.";
 
+        this.duration = duration;
+        this.decay = decay;
+
         this.convolver = audioContext.createConvolver();
         this.convolver.buffer = buildImpulseResponse(audioContext, duration, decay);
+
+        // Not params (there's no live AudioParam behind an impulse response)
+        // but runtime-settable as options — /reverb duration=4 regenerates
+        // the IR in place. Swapping a ConvolverNode's buffer mid-signal is
+        // audible as a brief tail discontinuity; acceptable for a live
+        // tweak, and the only way to change a convolution's character at
+        // all. Round-tripped via the base getOptions().
+        const rebuild = () => {
+            this.convolver.buffer = buildImpulseResponse(this.audioContext, this.duration, this.decay);
+        };
+        this.options = {
+            duration: {
+                get: () => this.duration,
+                set: (value) => {
+                    const num = Number(value);
+                    if (!Number.isFinite(num) || num <= 0 || num > 20) throw new Error(`invalid duration "${value}" — seconds, 0..20`);
+                    this.duration = num;
+                    rebuild();
+                },
+            },
+            decay: {
+                get: () => this.decay,
+                set: (value) => {
+                    const num = Number(value);
+                    if (!Number.isFinite(num) || num <= 0) throw new Error(`invalid decay "${value}" — a positive exponent`);
+                    this.decay = num;
+                    rebuild();
+                },
+            },
+        };
 
         this.wetGain = audioContext.createGain();
         this.wetGain.gain.value = wet;
@@ -39,8 +72,9 @@ export class NLLCReverb extends NLLCProcessor {
         this.wetGain.connect(this.output);
 
         // Console/UI-facing control surface (see commands.js's applyParams).
+        // wet allows up to a 2x boost but not an unbounded one.
         this.params = {
-            wet: new NLLCParam(this.wetGain.gain),
+            wet: new NLLCParam(this.wetGain.gain, { min: 0, max: 2 }),
         };
     };
 

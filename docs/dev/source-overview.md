@@ -67,11 +67,15 @@ and ignores `degree` entirely).
 `createHarmonyContext()` returns `{ root, scale }` (default: root `60`, a
 chromatic `scale` — every semitone). `resolveDegree(harmony, degree)` maps a
 (possibly negative, possibly multi-octave) scale-degree to a MIDI note number,
-wrapping into higher/lower octaves via `scale.length`. This is the hook only —
-chromatic `scale` makes `degree` behave as a plain semitone offset from `root`
-until real scale/chord logic (and a `/harmony` console command to change
-`root`/`scale` at runtime) gets built. `NLLC` constructs one shared instance
-and threads it into every synth (see [architecture.md](architecture.md#harmony-context)).
+wrapping into higher/lower octaves via `scale.length`.
+`parseDegreeList(value, label)` validates a degree list from either an array
+or the console's comma string — shared by the `/harmony scale=` command and
+`NLLCRandomNotes`' `scale` option, so the two can't drift on what a list
+accepts. Both `root` and `scale` are runtime-mutable via `/harmony`
+(commands.js mutates the shared object in place — synths hold a reference);
+chord/progression logic on top is still future work. `NLLC` constructs one
+shared instance and threads it into every synth (see
+[architecture.md](architecture.md#harmony-context)).
 
 ## `automation.js`
 
@@ -121,6 +125,28 @@ first line of defense — reject bad input before it ever reaches an
 `AudioParam` call — with the tick-level try/catch as a second, structural
 line of defense for anything that gets through anyway.
 
+`_scheduleRange` also has one more optional, duck-typed check per unit
+beyond `events`/`automation`: if `unit.generateEvents` exists (an
+event-generating modulator, e.g. `NLLCRandomNotes` — see
+`modulators/randomnotes.js` below), it's called with an *absolute*
+(non-loop-relative) beat range and whatever `NLLCEvent`s it returns get
+delivered straight to `unit.eventDestinations` (every channel currently
+`.notes`-patched to it — see `patch.js`/`nllc.js` below) via
+`destination.source.trigger(...)` — the exact same call a manually-authored
+event uses. Each delivered note also stamps `unit.lastEventTime` (the
+note's scheduled AudioContext time), which `ModulatorStrip.svelte` reads to
+flash its "notes" dot. See
+[architecture.md](architecture.md#event-generating-modulators-the-discrete-counterpart-to-a-patch)
+for the full picture, including why this needed absolute rather than
+loop-relative beats.
+
+`start()` calls one more optional, duck-typed per-unit hook before the first
+tick: `unit.onClockStart?.()`. A (re)start rewinds the absolute beat
+position to 0, so any unit holding its own absolute-beat state (currently
+just `NLLCRandomNotes`' candidate-grid cursor) must reset it there —
+otherwise a `/stop` `/start` leaves that state stranded at a beat number the
+clock won't reach again for a long time.
+
 ## `channel.js` — `NLLCChannel`
 
 Base class for anything with a fader, pan, an insert chain, and one or more
@@ -165,8 +191,12 @@ channels' sends can point at (see `channel.js` above and `nllc.js` below).
 Minimal: `name`, `output` (a `GainNode` — subclasses connect their voices into
 this), `events`/`automation` arrays, `params` (empty — see
 [creating-a-synth.md](creating-a-synth.md) if you want a synth with runtime
-params), `active` (transport pause flag, checked by the clock, not a bypass in the
-routing sense), and a no-op `trigger()` for subclasses to override.
+params), `options` (declarative non-rampable runtime settings, `{ key: {
+get(), set(value), choices? } }` — the console's `applyOptions` surface, and
+what the base `getOptions()` derives session serialization from; subclasses
+declare entries rather than overriding `getOptions()`), `active` (transport
+pause flag, checked by the clock, not a bypass in the routing sense), and a
+no-op `trigger()` for subclasses to override.
 
 ## `synths/oscsynth.js` — `NLLCOscSynth extends NLLCSynth`
 
@@ -178,11 +208,13 @@ see [commands.md](../user/commands.md) for `add_event`/`clear_events`.
 
 ## `synths/sampler.js` — `NLLCSampler extends NLLCSynth`
 
-Loads `SAMPLE_FILES` (hardcoded list, from `static/samples/`) into `slots` via
-`fetch` + `decodeAudioData`, URL-encoding filenames since they contain spaces.
+Loads its sample list (default `SAMPLE_FILES`, from `static/samples/`;
+runtime-swappable via the `samples` option, whose setter re-runs the same
+`_setSamples` path construction uses) into `slots` via `fetch` +
+`decodeAudioData`, URL-encoding filenames since they contain spaces.
 Loading is async and **not awaited** by anything (`this._loaded` is stored but
 never checked before `trigger()` — a hit that lands before its buffer finishes
-loading just silently no-ops). `trigger()` mod-wraps `event.pitch` into a valid
+loading just silently no-ops, including right after a runtime swap). `trigger()` mod-wraps `event.pitch` into a valid
 slot index (handles negative pitches correctly, not just `%`); `event.degree`
 is ignored entirely (pitch is always a slot index here, never resolved against
 harmony). Starts with an empty `events` array, same as `NLLCOscSynth`.
@@ -194,7 +226,9 @@ their own DSP between them), `active` (routing bypass, read by
 `Channel._rewireChain`), `params` (`{ paramName: NLLCParam }` — see `param.js`
 — this *is* meant to be filled in by subclasses; it's the introspection
 surface the command router uses for `/reverb wet=0.5` and `/reverb help`),
-`automation`.
+`options` (same declarative non-rampable-settings map as `NLLCSynth.options`
+— `NLLCReverb` uses it for `duration`/`decay`, whose setters rebuild the
+impulse response in place), and `automation`.
 
 ## `processors/reverb.js` — `NLLCReverb extends NLLCProcessor`
 
@@ -228,32 +262,97 @@ patched (see `patch.js`) into some other object's parameter. `output` is a
 plain `GainNode`; by convention a modulator's raw output is bipolar
 (roughly `-1..1`), since a *patch*'s own `depth` (not the modulator) decides
 how hard that signal pushes any given destination — the same modulator can
-drive several destinations at different depths.
+drive several destinations at different depths. Also has `options` (same
+map as `NLLCSynth`/`NLLCProcessor` — `NLLCLFO.waveform`,
+`NLLCRandomNotes.scale`) and an `automation` array + `addAutomation()`, so
+a modulator's own params can be loop-automated exactly like a processor's
+(`/lfo1 automate=freq ...`).
 
 ## `modulators/lfo.js` — `NLLCLFO extends NLLCModulator`
 
 A continuously-running `OscillatorNode` (started once in the constructor,
 never stopped) connected straight into `this.output` — a bipolar control
-signal at `freq` Hz. `params.freq` is an `NLLCParam` wrapping
+signal at `freq` Hz. `waveform` is a runtime option (its setter mutates
+`osc.type` in place, which `OscillatorNode` allows live). `params.freq` is
+an `NLLCParam` wrapping
 `osc.frequency`; `get freq()` is the same kind of thin alias as a processor's
 `get wet()`.
 
-## `patch.js` — `NLLCPatch`
+## `modulators/randomnotes.js` — `NLLCRandomNotes extends NLLCModulator`
 
-One "patch cable": connects a source object's `.output` (a modulator, but
-also a track/master's post-fader signal or a processor's post-effect signal —
-anything with an `.output`) into a destination `AudioParam`, through its own
-`depthGain` (attenuator) node — `sourceObject.output → depthGain →
-destParam`. `depth` lives on the patch, not either endpoint, specifically so
-the same source can drive several destinations at different amounts, and
-`params.depth` (an `NLLCParam` wrapping `depthGain.gain`) makes it rampable
-the exact same way a processor param is. Stores `sourceObject`/`destObject`
-(plus display-only `sourceName`/`destName` strings) so `NLLC` can
-cascade-remove a patch when either endpoint is itself torn down (see
-`nllc.js`). `disconnect()` tears down both Web Audio connections; it must run
-*before* the endpoint's own blanket `.disconnect()` in `removeTrack`/
-`removeProcessor`/`removeModulator`, since a specific-argument `.disconnect(node)`
-throws if that connection was already severed by a bare `.disconnect()`.
+The event-generating counterpart to `NLLCLFO` — see
+[architecture.md](architecture.md#event-generating-modulators-the-discrete-counterpart-to-a-patch)
+for the full model. Has no meaningful continuous `.output` (inherited but
+unused); instead implements `generateEvents(fromBeat, toBeat)`, called by
+`NLLCClock` every tick, and owns `this.eventDestinations = []` (every channel
+currently `.notes`-patched to it, maintained by `NLLCEventPatch`'s
+constructor/`disconnect()` — see `patch.js` below).
+
+`probability`/`min_gap` are real `NLLCParam`s — same get/set/ramp/`at=`
+machinery as anything else — backed by a `ConstantSourceNode.offset` each
+rather than a plain object field, purely to get real `AudioParam` scheduling
+"for free" for a value that isn't otherwise audio-rate. This surfaced a
+genuine Web Audio quirk worth knowing about elsewhere: a `ConstantSourceNode`
+with **no path into the actively-rendered graph** can have `setValueAtTime`-
+scheduled automation (which every `/recall`, `at=`, or ramp rides — see
+`automation.js`'s `setInstant`/`scheduleRamp`) silently never reflected back
+in a later `.value` read, even though a *direct* `.value =` assignment (what
+the constructor does for the initial value) always works regardless of
+connectivity. `NLLCLFO`'s `freq` never hit this in practice only because the
+mixer's `ModulatorStrip.svelte` happens to tap every modulator's `.output`
+with an `AnalyserNode` for its meter, which incidentally keeps that
+particular node's automation live — not a real fix, and not something a
+class should rely on. `NLLCRandomNotes` instead routes each
+`ConstantSourceNode` through its own muted (`gain: 0`, inaudible always)
+sink into `audioContext.destination` (`_silentSink`), which reliably keeps
+it live regardless of whether the mixer is even mounted. Those sinks aren't
+reachable via `this.output`, so `NLLC.removeModulator`'s generic
+`modulator.output.disconnect()` alone wouldn't tear them down — `dispose()`
+(called via the same duck-typed-optional-hook pattern as `generateEvents`
+itself) stops both `ConstantSourceNode`s and disconnects their sinks.
+
+`scale` (a list of candidate harmony-context degrees a generated note's pitch
+is randomly picked from) isn't backed by any `AudioParam` at all — it's a
+runtime *option* (`/rand1 scale=0,3,7`, parsed/validated by `harmony.js`'s
+`parseDegreeList`, applied from the next generated note), declared in
+`this.options` and round-tripped by the base `getOptions()`, same as
+`NLLCLFO`'s `waveform`.
+
+`onClockStart()` (a third duck-typed optional hook, called by
+`NLLCClock.start()` on every registered unit) resets `_nextCandidateBeat` —
+the candidate grid's cursor is an **absolute** beat number, and a clock
+(re)start rewinds absolute beats to 0, so without this a `/stop` `/start`
+would leave the cursor stranded at the pre-stop beat, generating nothing
+until the clock caught back up to it. Any future unit holding its own
+absolute-beat state needs the same hook.
+
+## `patch.js` — `NLLCPatch` / `NLLCEventPatch`
+
+`NLLCPatch`: one continuous "patch cable" — connects a source object's
+`.output` (a modulator, but also a track/master's post-fader signal or a
+processor's post-effect signal — anything with an `.output`) into a
+destination `AudioParam`, through its own `depthGain` (attenuator) node —
+`sourceObject.output → depthGain → destParam`. `depth` lives on the patch,
+not either endpoint, specifically so the same source can drive several
+destinations at different amounts, and `params.depth` (an `NLLCParam`
+wrapping `depthGain.gain`) makes it rampable the exact same way a processor
+param is. Stores `sourceObject`/`destObject` (plus display-only
+`sourceName`/`destName` strings) so `NLLC` can cascade-remove a patch when
+either endpoint is itself torn down (see `nllc.js`). `disconnect()` tears
+down both Web Audio connections; it must run *before* the endpoint's own
+blanket `.disconnect()` in `removeTrack`/`removeProcessor`/`removeModulator`,
+since a specific-argument `.disconnect(node)` throws if that connection was
+already severed by a bare `.disconnect()`.
+
+`NLLCEventPatch`: the discrete counterpart, connecting an event-generating
+modulator into a track instead of an `AudioParam` — see
+[architecture.md](architecture.md#event-generating-modulators-the-discrete-counterpart-to-a-patch)
+for the full model. No Web Audio node at all (nothing here is audio-rate) —
+its constructor's only real side effect is pushing `destObject` onto
+`sourceObject.eventDestinations`; `disconnect()` splices it back out.
+`params` is `{}` (no `depth`), which `commands.js`'s `patchSummary` and
+`session.js`'s `serializePatch`/`reconcilePatches` all check for before
+assuming a patch has one.
 
 ## `commands.js`
 
@@ -276,21 +375,39 @@ deferred ramp.
 `applyParams(nllc, paramsMap, input, { startTime, label }, { reportUnknown })`
 is the one function that knows how to get/set/ramp/defer any `NLLCParam` (see
 `param.js`) against a parsed command value — shared by `channelCommand`
-(gain/pan), `paramObjectCommand` (every processor/modulator param), and the
-`/patch` command (depth), replacing what used to be three separate hand-rolled
-copies of the same ramp/instant/`at=` branching.
+(gain/pan plus a track's synth's params), `paramObjectCommand` (every
+processor/modulator param), and the `/patch` command (depth), replacing what
+used to be three separate hand-rolled copies of the same
+ramp/instant/`at=` branching. Its non-rampable sibling is
+`applyOptions(object, input, exclude)` — applies keys naming entries in an
+object's declarative `options` map (rejecting ramp specs, validating
+against `choices`), with `exclude` = `compositeClaimedKeys(params)` so a
+composite command's generic keys (`automate=`'s `duration=`, say) don't
+also hit a same-named option (reverb's `duration`). The automate family —
+`addAutomationCommand` (builds an `NLLCAutomationEvent` with encoded
+values and a `paramKey`), `listAutomation` (indexed, decoded),
+`removeAutomationCommand` — is likewise shared by both command shapes.
 
 `channelCommand` and `paramObjectCommand` are the two shapes of object the
 router knows how to talk to: `channelCommand` handles a track, a bus, or
-master (gain/pan via `applyParams`, plus channel-specific params like
-`add_event`/`synth=`/`add_processor=`, and routing: `out=`/`add_send=`/
+master (gain/pan — and a track's synth's own params/options, routed through
+the track's name — via `applyParams`/`applyOptions`, plus channel-specific
+commands: `add_event`/`events`/`remove_event=`/`clear_events`, the automate
+family, `synth=`/`add_processor=`, and routing: `out=`/`add_send=`/
 `remove_send=`/`send=`+`send_gain=` against the channel's own `sends` — see
 `channel.js`'s `addSend`/`removeSend`/`connect` above); `paramObjectCommand`
 is shared by `processorCommand` and `modulatorCommand` (both are just
-"addressed by name, expose `.params`" — the only difference is which
-`nllc.remove*` function gets called for `remove_self`). `channelCommand`'s
-`remove_self` branch checks `nllc.buses.includes(channel)` to call
-`removeBus` instead of `removeTrack` for a bus.
+"addressed by name, expose `.params`/`.options`" — the only difference is
+which `nllc.remove*` function gets called for `remove_self`).
+`channelCommand`'s `remove_self` branch checks `nllc.buses.includes(channel)`
+to call `removeBus` instead of `removeTrack` for a bus. Both commands end
+with an unknown-key check against their consumed-key sets
+(`CHANNEL_COMMAND_KEYS`/`PARAM_OBJECT_COMMAND_KEYS`) plus every
+param/option surface they route to, so a typo'd key errors instead of
+silently vanishing. Two console-only guards protect master's speakers
+edge: `out=` is refused on master outright, and `remove_send=` refuses the
+send whose destination is `audioContext.destination` (nothing typed at the
+console could ever reconnect it).
 
 Both dispatch to one of three outcomes: `channelSummary`/`paramObjectSummary`
 (no params — condensed one-liner), `channelHelp`/`paramObjectHelp` (`help` —
@@ -318,20 +435,25 @@ property) specifically so it can close over the same `commands` object —
 into `topLevelNames` right after `commands` is built, so a new top-level
 command becomes suggestible for free with no second list to maintain.
 `suggestCompletion(nllc, topLevelNames, input, cursorPos)` (module-level, not
-part of the closure) does the actual work: only completes when the cursor
-sits at the very end of the input (mid-line completion isn't supported —
-see `CodeEditor.svelte`'s overlay technique for why), and only two token
-positions — the `/name` itself (`addressableNames`: every track/bus/
+part of the closure) does the actual work — anywhere in the line the cursor
+sits at a token boundary, not just at the end (see `CodeEditor.svelte`'s
+overlay technique in [architecture.md](architecture.md#console-suggestions-ghost-text-completion)).
+Three token shapes: the `/name` itself (`addressableNames`: every track/bus/
 processor/modulator/`master`, *then* top-level commands, deliberately in that
 order rather than `executeOne`'s dispatch order, so typing `/trac` suggests
-an actual track like `track_1` instead of the built-in `/tracks`), or, once
+an actual track like `track_1` instead of the built-in `/tracks`); once
 past the name, a bare param *key* for whatever channel/processor/modulator it
 resolves to (`resolveKeywordsFor` → `channelKeywordsFor`/
-`paramObjectKeywordsFor`, each object's own `params` keys plus one of two
-small hand-maintained keyword lists, `CHANNEL_ACTION_KEYWORDS`/
-`PARAM_OBJECT_ACTION_KEYWORDS`, for the non-param commands like
-`add_event`/`remove_self`/`help`). A token already containing `=` is
-mid-value and isn't completed (value suggestions aren't built yet).
+`paramObjectKeywordsFor` — each object's own `params` *and* `options` keys,
+a channel also its synth's, plus one of two small hand-maintained keyword
+lists, `CHANNEL_ACTION_KEYWORDS`/`PARAM_OBJECT_ACTION_KEYWORDS`, for the
+non-param commands like `add_event`/`automate=`/`remove_self`/`help`); or,
+once a key's `=` has at least one typed character after it, its *value*,
+for keys with an enumerable candidate set (`resolveValueCandidates`: type
+names, `beat`/`cycle`, `linear`/`exponential`/`target` for `curve=`, an
+object's param names for `automate=`, event/automation indices for
+`remove_event=`/`remove_automation=`, existing ids/names/states, and any
+option's declared `choices` — a waveform completes from its own list).
 `pickBestMatch` returns the first candidate that extends the typed prefix —
 no ranking or cycling among several matches yet (see
 [adding-commands.md](adding-commands.md#keeping-suggestions-in-sync) for what
@@ -374,16 +496,97 @@ The top-level object and factory/registry hub:
   ("name.param")` splits on the dot and looks up
   `object.params[paramKey].audioParam` — one lookup for every kind of object,
   since channels/processors/modulators all expose `params` as `{ key:
-  NLLCParam }` uniformly (see `param.js`). `_removePatchesReferencing(object)`
-  cascade-removes any patch whose `sourceObject` or `destObject` is the object
-  being torn down, so a patch never outlives either endpoint.
-  `_removeSendsReferencing(object)` is the same idea for sends: it walks every
-  track, bus, and master and removes any send whose `destination` is the
-  object being torn down, so a send never outlives the channel it fed into.
-- `_uniqueName(base, existingNames)` — de-duplicates names as `base`, `base_2`,
-  `base_3`, ... (used independently for tracks, buses, processors, and
-  modulators — each its own namespace, so it's possible, if unlikely, for two
-  different kinds of object to end up with the same addressable name).
+  NLLCParam }` uniformly (see `param.js`). A `destName` ending in `.notes`
+  (the reserved event-patch destination — see
+  [architecture.md](architecture.md#event-generating-modulators-the-discrete-counterpart-to-a-patch))
+  branches to `_createEventPatch` instead, which validates the source has a
+  `generateEvents` method and the destination channel has a `.source` before
+  building an `NLLCEventPatch` (`patch.js`) rather than an `NLLCPatch`.
+  `_removePatchesReferencing(object)` cascade-removes any patch whose
+  `sourceObject` or `destObject` is the object being torn down, so a patch
+  never outlives either endpoint — this works uniformly across both patch
+  kinds since both expose a `disconnect()` method, just with different
+  teardown logic behind it. `_removeSendsReferencing(object)` is the same
+  idea for sends: it walks every track, bus, and master and removes any send
+  whose `destination` is the object being torn down, so a send never
+  outlives the channel it fed into.
+- `_uniqueName(base)` — validates `base` as an addressable name (must parse
+  as a `/name` token: letters/digits/`_`, starting with a letter or `_` — no
+  dots, which would collide with the `name.param` patch-destination syntax),
+  then de-duplicates as `base`, `base_2`, `base_3`, ... against **one**
+  shared namespace: every existing track, bus, processor, and modulator
+  (`_allNames()`) plus `RESERVED_NAMES` (the module-level set of every
+  top-level command name and `master`, exported so `commands.js` can
+  sanity-check its own command keys against it at router build time). The
+  router dispatches a bare `/name` against all of those in order, so a
+  duplicate across kinds — or an object named after a command — would be
+  permanently shadowed; de-duplicating globally at creation time makes that
+  impossible. **A new top-level command must be added to `RESERVED_NAMES`
+  too** (a `console.warn` at router construction catches a forgotten one).
+
+## `session.js`
+
+No classes — whole-session (de)serialization plus the diff-and-ramp
+reconciler behind `/recall`. Three exports, all closing over a live `NLLC`
+instance rather than holding any state of their own:
+
+- `snapshotSession(nllc)`/`sessionToJSON(nllc)` — a pure, JSON-serializable
+  snapshot of everything live: clock/harmony, master/every bus/every track
+  (each with `params`/`processors`/`sends`, a track also its synth's
+  `type`/`options`/`params`/`events`), every modulator, every patch (an
+  `NLLCEventPatch`'s missing `depth` is handled by `serializePatch` checking
+  `patch.params.depth` before reading it, rather than assuming every patch is
+  shaped like a regular `NLLCPatch` — same guard `reconcilePatches` below
+  needs).
+  `sessionToJSON` adds a `version` and `nllc.states` (see `/save` below) on
+  top of the same shape `snapshotSession` returns. Every rampable value comes
+  from `NLLCParam.get()` (see `param.js`) — already the decoded, user-facing
+  number. Every constructible object (a synth, processor, or modulator) is
+  tagged with the registry key that built it: `NLLC.createSynth`/
+  `createProcessor`/`createModulator` each set a `.type` string on the
+  instance they return specifically so this module can serialize "which
+  class to reconstruct" without reverse-deriving it from `instanceof`
+  against `SYNTH_TYPES`/`PROCESSOR_TYPES`/`MODULATOR_TYPES`. Non-param
+  runtime state (`NLLCReverb`'s `duration`/`decay`, `NLLCDelay`'s
+  `stereoOffset`, `NLLCLFO`'s/`NLLCOscSynth`'s `waveform`, `NLLCSampler`'s
+  `samples`, `NLLCRandomNotes`' `scale`) is captured by `getOptions()`,
+  which the base classes derive from each object's declarative
+  `this.options` map — a subclass never overrides it. Loop automation
+  (every unit's `.automation`) is captured too: `serializeAutomation`
+  stores each console-authored event by its `paramKey` with user-facing
+  (decoded) from/to values, and `rebuildAutomation` re-resolves the param
+  by name and re-encodes on load/recall — an event built in code against a
+  bare `AudioParam` (no `paramKey`) is skipped, and a rebuilt `once` event
+  fires once more.
+- `loadSession(nllc, json)` — a hard rebuild: tears down every track/bus/
+  modulator/patch and every processor on master, then reconstructs from
+  scratch by calling the exact same `nllc.createTrack`/`createBus`/
+  `addProcessor`/`addSend`/`createModulator`/`createPatch` the console itself
+  uses — no second construction path to keep in sync. Order matters:
+  buses/tracks first (with a throwaway default send), then every bus's/
+  track's *real* saved sends once every possible destination by name
+  actually exists, then modulators, then patches last, since a patch
+  resolves both endpoints by name against whatever's already been built.
+  This is the vehicle for `/load_session` (see `commands.js`) — a cold-start
+  operation, so unlike `applySnapshot` below there's no attempt to be
+  glitch-free.
+- `applySnapshot(nllc, snapshot, { startTime, durationSeconds })` — the
+  vehicle for `/recall`. Diffs the *live* session against a saved one
+  (matched by `.name`, and for processors/modulators also by `.type`) and
+  reconciles the difference rather than rebuilding: a matching object's
+  params ramp toward the saved values via the same `scheduleRamp`/
+  `setInstant` (`automation.js`) every console ramp already rides — no new
+  scheduling primitive; an object only in the snapshot is created and its
+  gain/depth ramped up from 0 (a fade-in); an object only live has its gain/
+  depth ramped down to 0 and is torn down only once that fade completes (a
+  fade-out), rather than cut instantly. Structural graph changes themselves
+  (creating/removing a track, reordering a processor chain) can't ride
+  native `AudioParam` scheduling the way a ramp can, so — the same
+  compromise `NLLCClock.rampBpm` already makes for tempo — they're deferred
+  via a plain `setTimeout` computed from `startTime`, while any param ramps
+  on the same objects are still scheduled immediately (a future `AudioParam`
+  value doesn't need its node connected into the graph yet at schedule time,
+  only by the time it fires, which the paired `setTimeout` guarantees).
 
 ## `ollama.js` — `Ollama`
 

@@ -45,6 +45,12 @@ export class NLLCClock {
         this.running = true;
         this.startTime = this.audioContext.currentTime;
         this.scheduledUpTo = 0;
+        // A (re)start rewinds the absolute beat position to 0 — any unit
+        // holding its own absolute-beat state (e.g. NLLCRandomNotes'
+        // candidate-grid cursor) must reset it, or after a /stop /start it
+        // would sit silently waiting for a beat number that's now far in the
+        // future. Duck-typed and optional, like trigger()/generateEvents().
+        for (const unit of this.units) unit.onClockStart?.();
         this._tick();
     };
 
@@ -205,6 +211,37 @@ export class NLLCClock {
                         const time = this.beatToTime(loopBeatStart + event.beat);
                         scheduleAutomationEvent(time, event, this.secondsPerBeat);
                         event._scheduled = true;
+                    }
+                }
+
+                // Event-generating modulators (e.g. NLLCRandomNotes) are the
+                // discrete counterpart to a continuous CV signal: rather than a
+                // fixed, loop-relative events array, generateEvents() is asked
+                // for whatever it wants to fire in this absolute (non-looping)
+                // beat range, so its own internal state (e.g. "beats since the
+                // last note") advances forever instead of resetting every pass
+                // through the loop. Generated notes go straight to whatever
+                // synth(s) are patched into this modulator's ".notes" (see
+                // nllc.js's createPatch/NLLCEventPatch) — a manually-authored
+                // pattern (unit.events, handled above) is untouched by this.
+                if (typeof unit.generateEvents === "function") {
+                    const fromBeat = loopBeatStart + rangeStart;
+                    const toBeat = loopBeatStart + rangeEnd;
+                    for (const event of unit.generateEvents(fromBeat, toBeat, this.secondsPerBeat)) {
+                        const time = this.beatToTime(event.beat);
+                        let delivered = false;
+                        for (const destination of unit.eventDestinations ?? []) {
+                            if (destination.source?.active === false) continue;
+                            destination.source?.trigger(time, event, this.secondsPerBeat);
+                            delivered = true;
+                        }
+                        // The AudioContext time of the latest note actually
+                        // delivered somewhere — read by the mixer's
+                        // ModulatorStrip to flash on each audible note,
+                        // since an event generator's continuous `.output`
+                        // (what the strip's meter taps for an LFO) reads a
+                        // meaningless flat 0.
+                        if (delivered) unit.lastEventTime = time;
                     }
                 }
             }

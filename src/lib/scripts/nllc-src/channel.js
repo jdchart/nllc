@@ -125,6 +125,16 @@ export class NLLCChannel {
         // outgoing edge to whatever came after it would otherwise dangle.
         removed.output.disconnect();
         removed._channel = null;
+        // Once spliced out, _rewireChain's own _chainTarget-clearing loop
+        // never sees this processor again (it only walks this.processors),
+        // so without this the blanket disconnect() above leaves a stale
+        // _chainTarget behind. Harmless if `removed` is discarded, but if
+        // the same instance is ever re-added later (e.g. session.js's
+        // /recall reordering a channel's chain in place), the next
+        // _rewireChain() would try to disconnect(that stale target) against
+        // an output already fully disconnected — throwing, since that
+        // specific edge no longer exists.
+        removed._chainTarget = null;
 
         this._rewireChain();
         return true;

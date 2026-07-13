@@ -3,7 +3,8 @@
     // live depth. depth is a raw AudioParam (not Svelte state), so this polls
     // it every frame the same way MixerChannel/Transport poll their own live
     // values, diffing a joined key so unrelated re-renders don't fire when
-    // nothing has actually changed.
+    // nothing has actually changed. An event patch (dest=<track>.notes — see
+    // NLLCEventPatch) has no depth at all; depth is null for those rows.
     let { patches = [], onRemove = () => {} } = $props();
 
     let rows = $state([]);
@@ -12,10 +13,15 @@
     $effect(() => {
         let rafId;
         const tick = () => {
-            const key = patches.map((p) => `${p.id}:${p.depth.value.toFixed(3)}`).join(",");
+            const key = patches.map((p) => `${p.id}:${p.params.depth ? p.depth.value.toFixed(3) : "notes"}`).join(",");
             if (key !== rowsKey) {
                 rowsKey = key;
-                rows = patches.map((p) => ({ id: p.id, sourceName: p.sourceName, destName: p.destName, depth: p.depth.value }));
+                rows = patches.map((p) => ({
+                    id: p.id,
+                    sourceName: p.sourceName,
+                    destName: p.destName,
+                    depth: p.params.depth ? p.depth.value : null,
+                }));
             }
             rafId = requestAnimationFrame(tick);
         };
@@ -34,7 +40,7 @@
                 <div class="row">
                     <span class="id">{row.id}</span>
                     <span class="cable">{row.sourceName} → {row.destName}</span>
-                    <span class="depth">depth {row.depth.toFixed(2)}</span>
+                    <span class="depth">{row.depth === null ? "notes" : `depth ${row.depth.toFixed(2)}`}</span>
                     <button class="remove" onclick={() => onRemove(patches.find((p) => p.id === row.id))} title="Remove {row.id}">×</button>
                 </div>
             {/each}
