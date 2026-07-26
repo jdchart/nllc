@@ -10,7 +10,7 @@
 - add_track name=blabla gain=0.5 (initialize things on creation) -> (/add_track name=blabla /blabla gain = 0.5 works)
 
 ## creative
-- create a synth that mimicks the landscape noon
+- landscape noon synth isnt great remove (but need docs and routines for that cause its probbly elsewhere) and go more incrementally.
 
 ## claude
 - do periodic code reviews

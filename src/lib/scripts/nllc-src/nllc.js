@@ -5,8 +5,10 @@ import { NLLCReverb } from "./processors/reverb";
 import { NLLCDelay } from "./processors/delay";
 import { NLLCOscSynth } from "./synths/oscsynth";
 import { NLLCSampler } from "./synths/sampler";
+import { NLLCNoon } from "./synths/noon";
 import { NLLCLFO } from "./modulators/lfo";
 import { NLLCRandomNotes } from "./modulators/randomnotes";
+import { NLLCCV } from "./modulators/cv";
 import { NLLCPatch, NLLCEventPatch } from "./patch";
 import { createHarmonyContext } from "./harmony";
 
@@ -24,11 +26,13 @@ const PROCESSOR_TYPES = {
 const SYNTH_TYPES = {
     oscsynth: NLLCOscSynth,
     sampler: NLLCSampler,
+    noon: NLLCNoon,
 };
 
 const MODULATOR_TYPES = {
     lfo: NLLCLFO,
     randomnotes: NLLCRandomNotes,
+    cv: NLLCCV,
 };
 
 // Every name the console router dispatches before it ever looks at objects:
@@ -226,10 +230,17 @@ export class NLLC {
     // so it starts being scheduled immediately.
     setTrackSynth(track, type, options = {}) {
         const newSource = this.createSynth(type, options);
+        const oldSource = track.source;
 
-        this.clock.removeUnit(track.source);
+        this.clock.removeUnit(oldSource);
         track.setSource(newSource);
         this.clock.addUnit(newSource);
+        // Duck-typed, like NLLCRandomNotes' own dispose() — most synths
+        // (oscsynth, sampler) own nothing beyond one-shot per-trigger
+        // nodes, but one with persistent always-running nodes (e.g. noon's
+        // ambient noise loop) needs this so the outgoing synth doesn't keep
+        // running forever, disconnected but still alive.
+        oldSource.dispose?.();
 
         return newSource;
     };
@@ -279,6 +290,8 @@ export class NLLC {
         for (const send of [...track.sends]) track.removeSend(send.id);
 
         track.source.output.disconnect();
+        // See setTrackSynth's own oldSource.dispose?.() for why this exists.
+        track.source.dispose?.();
         track.input.disconnect();
         track.gainNode.disconnect();
 
@@ -403,7 +416,11 @@ export class NLLC {
         const object = this._resolveObject(objectName);
         if (!object) throw new Error(`unknown patch destination object "${objectName}"`);
 
-        const param = object.params?.[paramKey];
+        // A track routes its own name through to its synth's params too
+        // (the same fallback channelCommand already uses for a plain
+        // `/track_1 cutoff=800` set) — a synth's own params (e.g. noon's
+        // cv) are otherwise unreachable as a patch destination.
+        const param = object.params?.[paramKey] ?? object.source?.params?.[paramKey];
         if (!param) throw new Error(`unknown param "${paramKey}" on "${objectName}"`);
 
         return { object, param: param.audioParam };

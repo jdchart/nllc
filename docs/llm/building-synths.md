@@ -73,3 +73,10 @@ against `choices`, which also drive ghost-text completion; ramp specs
 rejected), lists it in `help`, and round-trips it through
 `/save_session`/`/recall` — the base `getOptions()` derives from this map
 (same keys your constructor accepts back), so don't override it.
+
+If your synth builds anything *persistent* beyond `trigger()`'s usual
+one-shot nodes (an always-running `BufferSourceNode`/`ConstantSourceNode`,
+e.g. `NLLCNoon`'s idle noise floor), implement `dispose()` to stop it —
+`NLLC.removeTrack`/`setTrackSynth` call it duck-typed (like
+`NLLCRandomNotes.dispose()` already does for modulators), so it only needs
+implementing when there's actually something to tear down.
