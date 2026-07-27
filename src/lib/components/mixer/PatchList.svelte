@@ -4,7 +4,7 @@
     // it every frame the same way MixerChannel/Transport poll their own live
     // values, diffing a joined key so unrelated re-renders don't fire when
     // nothing has actually changed. An event patch (dest=<track>.notes — see
-    // NLLCEventPatch) has no depth at all; depth is null for those rows.
+    // RibbitEventPatch) has no depth at all; depth is null for those rows.
     let { patches = [], onRemove = () => {} } = $props();
 
     let rows = $state([]);

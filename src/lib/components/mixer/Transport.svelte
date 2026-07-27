@@ -12,7 +12,7 @@
     let numBeats = $state(0);
 
     // nllc.running/nllc.clock aren't Svelte state (they're mutated by plain
-    // NLLC/NLLCClock methods, not component code), so this polls them every
+    // Ribbit/RibbitClock methods, not component code), so this polls them every
     // frame and recomputes the current beat from the clock's own precise
     // AudioContext-time bookkeeping rather than tracking beats independently.
     // bpm/numBeats are polled into their own $state too (not read off

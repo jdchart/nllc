@@ -10,9 +10,7 @@
     import CodeEditor from "$lib/components/code-editor/CodeEditor.svelte";
     import Mixer from "$lib/components/mixer/Mixer.svelte";
     import CollapsedRail from "$lib/components/mixer/CollapsedRail.svelte";
-    import { NLLC } from "$lib/scripts/nllc-src/nllc";
-    import { createCommandRouter } from "$lib/scripts/nllc-src/commands";
-    import { loadSession } from "$lib/scripts/nllc-src/session";
+    import { Ribbit, createCommandRouter, loadSession } from "ribbit";
 
     let { demoSessionUrl = null, title = "NLLC // Session" } = $props();
 
@@ -67,12 +65,12 @@
         window.addEventListener("pointerup", onUp);
     };
 
-    // NLLC touches AudioContext, which doesn't exist during SSR,
+    // Ribbit touches AudioContext, which doesn't exist during SSR,
     // so it's constructed client-side only, inside onMount.
     onMount(() => {
         // Audio options set on the homepage (see routes/+page.svelte) —
         // latencyHint only takes effect at AudioContext construction time,
-        // so it has to be read before `new NLLC(...)`; the output device
+        // so it has to be read before `new Ribbit(...)`; the output device
         // (sinkId) can be applied any time after. Both are best-effort: no
         // saved prefs, an unsupported browser, or a since-unplugged device
         // id should all just fall back to the platform default rather than
@@ -80,7 +78,7 @@
         const latencyHint = localStorage.getItem("nllc:audioLatencyHint") || undefined;
         const outputDeviceId = localStorage.getItem("nllc:audioOutputDeviceId");
 
-        const nllc = new NLLC({ latencyHint });
+        const nllc = new Ribbit({ latencyHint });
         if (outputDeviceId && typeof nllc.audioContext.setSinkId === "function") {
             nllc.audioContext.setSinkId(outputDeviceId).catch(() => {});
         }

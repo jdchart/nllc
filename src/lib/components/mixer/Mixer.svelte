@@ -1,6 +1,6 @@
 <script>
     // The full mixer pane: a transport strip, one MixerChannel per track, and
-    // a master strip. Purely a read/write view onto the live NLLC graph
+    // a master strip. Purely a read/write view onto the live Ribbit graph
     // (each MixerChannel operates directly on its channel's real Web Audio
     // nodes) — `tracks`/`modulators`/`patches` are handed down from the
     // parent page, which is the one place polling nllc's plain arrays for

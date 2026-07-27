@@ -3,7 +3,7 @@
 
     // onRemove is only passed for tracks/buses (see Mixer.svelte) — master
     // can't be removed, so leaving it undefined there hides the button below
-    // rather than wiring it to a no-op. `patches` (every active NLLCPatch,
+    // rather than wiring it to a no-op. `patches` (every active RibbitPatch,
     // same array Mixer.svelte already threads to PatchList) is only used to
     // detect whether this channel's own gain/pan is a live patch
     // destination — a patch connects straight into the raw AudioParam
@@ -17,7 +17,7 @@
     const panPatched = $derived(patches.some((p) => p.destName === `${channel.name}.pan`));
 
     // "position" is the fader's linear 0-1 position; channel.params.gain's own
-    // decode/encode (the same NLLCParam/taper.js exponential curve the
+    // decode/encode (the same RibbitParam/taper.js exponential curve the
     // console's gain=/ramp path uses — see param.js/channel.js) turns it into
     // the node's actual 0-1 gain value, so the fader and the console share
     // exactly one taper implementation instead of two.
@@ -38,7 +38,7 @@
     // external changes (console commands, automation), and polls this
     // channel's processor list for additions/removals/bypass toggles — all
     // three read off the live channel object rather than Svelte state, since
-    // NLLC/NLLCChannel mutate their own arrays and AudioParams directly.
+    // Ribbit/RibbitChannel mutate their own arrays and AudioParams directly.
     $effect(() => {
         const analyser = audioContext.createAnalyser();
         analyser.fftSize = 256;

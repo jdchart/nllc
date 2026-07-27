@@ -2,7 +2,7 @@
     import { onMount } from "svelte";
 
     // Audio prefs are stored here (localStorage) and picked up by
-    // SessionPage.svelte on mount when it constructs its own NLLC/
+    // SessionPage.svelte on mount when it constructs its own Ribbit/
     // AudioContext — this page never creates one itself, so there's nothing
     // here to apply them *to* yet, just to remember for next time.
     const LATENCY_KEY = "nllc:audioLatencyHint";
@@ -76,10 +76,6 @@
         <a class="session-link" href="/code-editor/demo">
             <span class="session-title">Demo session</span>
             <span class="session-desc">Auto-loads static/sessions/demo.json — two tracks, a reverb bus, an LFO patch, two saved states.</span>
-        </a>
-        <a class="session-link" href="/code-editor/noon">
-            <span class="session-title">Noon demo</span>
-            <span class="session-desc">Auto-loads static/sessions/noon-demo.json — a noon synth self-glitching continuously, a cv modulator driving its instability, an LFO patched into channel linking.</span>
         </a>
     </div>
 
