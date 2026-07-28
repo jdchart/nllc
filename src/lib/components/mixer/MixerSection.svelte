@@ -1,5 +1,6 @@
 <script>
     import { untrack } from "svelte";
+    import { beginDrag } from "$lib/scripts/drag.js";
 
     // One panel of the mixing bay. Two layouts:
     // - "row" (Tracks/Buses/Master, side by side in Mixer.svelte's `.row`):
@@ -43,7 +44,7 @@
     let bodyEl = $state();
 
     function startResize(event) {
-        event.preventDefault();
+        const endDrag = beginDrag(event);
         if (width === null) width = untrack(() => bodyEl.getBoundingClientRect().width);
         const startX = event.clientX;
         const startWidth = width;
@@ -55,6 +56,7 @@
 
         function onUp() {
             resizing = false;
+            endDrag();
             window.removeEventListener("pointermove", onMove);
             window.removeEventListener("pointerup", onUp);
         };
@@ -147,7 +149,14 @@
 
     .section.row.grow:not(.collapsed) {
         flex: 1;
-        min-width: 0;
+        /* Not min-width: 0. `grow` exists so Tracks absorbs the row's spare
+           width and scrolls its own strips rather than pushing Master onto a
+           second row — but with a 0 minimum it keeps shrinking past that,
+           and in a narrow pane it collapses to nothing, leaving its vertical
+           title sitting on top of the next section's. A floor of roughly one
+           strip plus its label means the row overflows instead, which .row's
+           own overflow-x: auto already handles. */
+        min-width: 110px;
     }
 
     .section.row .header {

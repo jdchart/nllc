@@ -49,3 +49,10 @@ html, body {
 *::-webkit-scrollbar-thumb:hover {
     background: var(--nllc-text-dim);
 }
+
+/* Set for the duration of a pointer drag (see lib/scripts/drag.js) so a
+   dial/handle drag never leaves a trail of highlighted text behind it. */
+body.dragging,
+body.dragging * {
+    user-select: none;
+}

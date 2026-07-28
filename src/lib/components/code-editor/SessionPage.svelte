@@ -1,18 +1,19 @@
 <script>
-    // The console+mixer page shell shared by both /code-editor (a blank
-    // session) and /code-editor/demo (the same shell, auto-loading
-    // static/sessions/demo.json — see session.js's loadSession). Neither
-    // route hand-authors any demo content of its own anymore; a fresh
-    // session starts truly empty (just master), and "demo" just means
-    // "fetch a session.json and load it" the same way /load_session does
-    // from a picked file, minus the file picker.
+    // The console+mixer page shell shared by /code-editor (a blank session)
+    // and /code-editor/<slug> (the same shell, auto-loading
+    // static/sessions/<slug>.json — see session.js's loadSession). Neither
+    // route hand-authors any content of its own; a fresh session starts
+    // truly empty (just master), and opening a saved one just means "fetch a
+    // session.json and load it" the same way /load_session does from a
+    // picked file, minus the file picker.
     import { onMount } from "svelte";
     import CodeEditor from "$lib/components/code-editor/CodeEditor.svelte";
     import Mixer from "$lib/components/mixer/Mixer.svelte";
     import CollapsedRail from "$lib/components/mixer/CollapsedRail.svelte";
     import { Ribbit, createCommandRouter, loadSession } from "ribbit";
+    import { beginDrag } from "$lib/scripts/drag.js";
 
-    let { demoSessionUrl = null, title = "NLLC // Session" } = $props();
+    let { sessionUrl = null, title = "NLLC // Session" } = $props();
 
     let nllc_instance = $state(null);
     let tracks = $state([]);
@@ -21,6 +22,7 @@
     let patches = $state([]);
     let executeCommand = $state((text) => `unrecognized: "${text}" (engine not ready yet)`);
     let suggest = $state(() => null);
+    let sessionError = $state("");
     let codeEditor;
 
     // Passed down through Mixer to every clickable name/param label
@@ -45,7 +47,7 @@
 
     function startResize(event) {
         if (!mixerVisible) return;
-        event.preventDefault();
+        const endDrag = beginDrag(event);
 
         const startX = event.clientX;
         const startWidth = mixerWidth;
@@ -57,6 +59,7 @@
 
         function onUp() {
             resizing = false;
+            endDrag();
             window.removeEventListener("pointermove", onMove);
             window.removeEventListener("pointerup", onUp);
         };
@@ -86,11 +89,23 @@
         nllc_instance = nllc;
         ({ executeCommand, suggest } = createCommandRouter(nllc));
 
-        if (demoSessionUrl) {
-            fetch(demoSessionUrl)
-                .then((response) => response.json())
+        if (sessionUrl) {
+            // A URL segment that doesn't match a real file is now reachable by
+            // hand (/code-editor/anything), and a 404 returns HTML that fails
+            // in .json() rather than at fetch — so check `ok` explicitly and
+            // report the failure on the page. Without this the result is an
+            // apparently-normal empty session, indistinguishable from asking
+            // for a blank one.
+            fetch(sessionUrl)
+                .then((response) => {
+                    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+                    return response.json();
+                })
                 .then((json) => loadSession(nllc, json))
-                .catch((error) => console.error(`SessionPage: failed to load demo session "${demoSessionUrl}"`, error));
+                .catch((error) => {
+                    sessionError = `Couldn't load ${sessionUrl} — ${error.message}. This session is empty.`;
+                    console.error(`SessionPage: failed to load session "${sessionUrl}"`, error);
+                });
         }
 
         // nllc.tracks/buses/modulators/patches are plain (non-reactive) arrays
@@ -116,13 +131,27 @@
         };
         poll();
 
-        return () => cancelAnimationFrame(rafId);
+        // Client-side navigation (hitting back to the homepage) unmounts this
+        // component but leaves the AudioContext and the clock's setTimeout
+        // loop running — the engine isn't owned by the DOM, so it has to be
+        // torn down explicitly or the session keeps playing on the next page.
+        return () => {
+            cancelAnimationFrame(rafId);
+            nllc.dispose();
+        };
     });
 </script>
 
 <svelte:head>
     <title>{title}</title>
 </svelte:head>
+
+{#if sessionError}
+    <div class="session-error" role="alert">
+        <span>{sessionError}</span>
+        <button onclick={() => sessionError = ""} aria-label="Dismiss">×</button>
+    </div>
+{/if}
 
 <div class="layout">
     <div class="console-pane">
@@ -158,6 +187,36 @@
 </div>
 
 <style>
+    .session-error {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 0.75rem;
+        background: var(--nllc-panel-bg);
+        border-bottom: 1px solid var(--nllc-meter-hot);
+        color: var(--nllc-meter-hot);
+        font-family: var(--nllc-font-mono);
+        font-size: 0.8rem;
+    }
+
+    .session-error span {
+        flex: 1;
+    }
+
+    .session-error button {
+        background: none;
+        border: none;
+        color: inherit;
+        cursor: pointer;
+        font-size: 1rem;
+        line-height: 1;
+    }
+
     .layout {
         display: flex;
         height: 100vh;

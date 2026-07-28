@@ -11,16 +11,19 @@ this file only covers the app.
 ```
 nllc/  (SvelteKit app)
 ├── src/routes/
-│   ├── +page.svelte                 homepage: links + audio-options panel (localStorage prefs)
+│   ├── +page.svelte                 homepage: blank-session link, session dropdown, audio options
+│   ├── +page.server.js              lists static/sessions/*.json for that dropdown
 │   └── code-editor/
 │       ├── +page.svelte             blank session
-│       └── demo/+page.svelte        auto-loads /sessions/demo.json
+│       └── [session]/+page.svelte   auto-loads /sessions/<slug>.json
 ├── src/lib/components/
 │   ├── code-editor/SessionPage.svelte   ← THE integration point (see below)
 │   ├── code-editor/CodeEditor.svelte    console: input + scrollback + ghost-text + history
 │   └── mixer/*.svelte                    live read/write view of the graph
-├── src/lib/scripts/ollama.js        Ollama() stub — future NL→command layer
-└── static/{samples,sessions}/       drum samples served at /samples; demo session JSON
+├── src/lib/scripts/
+│   ├── ollama.js                    Ollama() stub — future NL→command layer
+│   └── drag.js                      beginDrag(): shared pointer-drag selection suppression
+└── static/{samples,sessions}/       drum samples served at /samples; session JSON
 ```
 
 ## Engine integration (the one thing to know)
@@ -33,8 +36,8 @@ import { Ribbit, createCommandRouter, loadSession } from "ribbit";
 
 In `onMount` (client-only — `AudioContext` has no SSR), it constructs one
 `Ribbit`, builds `{ executeCommand, suggest } = createCommandRouter(engine)` for
-the console, optionally `loadSession(engine, fetchedJson)` for the demo
-route, and then **polls** `engine.tracks/buses/modulators/patches` per animation
+the console, optionally `loadSession(engine, fetchedJson)` when given a
+`sessionUrl`, and then **polls** `engine.tracks/buses/modulators/patches` per animation
 frame, diffing by element identity into Svelte `$state` arrays so the mixer
 tracks graph mutations. The engine's arrays are intentionally plain/non-reactive;
 this poll-and-diff is the bridge. Every other component gets the engine (or
@@ -60,3 +63,9 @@ Homepage writes `localStorage` keys `nllc:audioLatencyHint` /
   of the engine.
 - The engine (`ribbit`) is where new synths/processors/modulators/commands are
   added — not here. See `ribbit/docs/dev/`.
+- The session dropdown is filled by a *server* load, so under `vite dev` it
+  re-reads `static/sessions/` on every request (drop a file in, refresh, it's
+  there) but a production build bakes the list at build/prerender time.
+- `SessionPage` must call `engine.dispose()` when it unmounts — an
+  `AudioContext` and the clock's `setTimeout` loop are not reachable by GC, so
+  without it a client-side navigation leaves the session playing.

@@ -92,6 +92,10 @@
         padding: 1rem;
         gap: 0.75rem;
         min-height: 0;
+        /* Without this the column takes its width from its widest child
+           instead of from the pane, so a too-wide row pushes content out
+           past the pane's clip edge rather than letting .row scroll it. */
+        min-width: 0;
     }
 
     .row {

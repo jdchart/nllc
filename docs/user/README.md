@@ -23,12 +23,18 @@ audio-options panel.
 
 ## Pages
 
-- **`/`** — homepage: links to the sessions below, plus the **audio options**
-  panel (see below).
+- **`/`** — homepage: a link to a blank session, a **dropdown of every saved
+  session** in `static/sessions/` (each with a one-line summary of what it
+  contains), and the **audio options** panel (see below).
 - **`/code-editor`** — a **blank session**: nothing but the master channel.
-- **`/code-editor/demo`** — the same page, auto-loading `static/sessions/demo.json`
-  on open (a couple of tracks, a reverb bus, an LFO patch, a couple of saved
-  states). Good for hearing something immediately or reading as a worked example.
+- **`/code-editor/<name>`** — the same page, auto-loading
+  `static/sessions/<name>.json` on open. `/code-editor/demo` is the one that
+  ships (a couple of tracks, a reverb bus, an LFO patch, a couple of saved
+  states) — good for hearing something immediately or reading as a worked
+  example. Any other `.json` you put in `static/sessions/` gets its own URL the
+  same way, and is listed in the homepage's session dropdown (with a one-line
+  summary of what's in it). If the file is missing or unparseable the page
+  still opens, as an empty session, with a banner saying why.
 
 A session page has two panes with a collapse arrow and a drag-to-resize handle
 between them.

@@ -47,9 +47,10 @@ cd nllc
 npm run dev -- --open
 ```
 
-Open `/` — it links to a blank session (`/code-editor`), a demo session
-(`/code-editor/demo`, auto-loading `static/sessions/demo.json`), and a small
-audio-options panel (output device, latency).
+Open `/` — it links to a blank session (`/code-editor`), offers a dropdown of
+every `.json` in `static/sessions/` to open at `/code-editor/<name>`, and has a
+small audio-options panel (output device, latency). Drop a file saved with
+`/save_session` into `static/sessions/` and it appears in that dropdown.
 See the [ribbit tutorial](../ribbit/docs/user/tutorial.md) for a walkthrough of
 your first commands.
 

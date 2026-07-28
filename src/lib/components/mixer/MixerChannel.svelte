@@ -1,5 +1,6 @@
 <script>
     import { untrack } from "svelte";
+    import { beginDrag } from "$lib/scripts/drag.js";
 
     // onRemove is only passed for tracks/buses (see Mixer.svelte) — master
     // can't be removed, so leaving it undefined there hides the button below
@@ -115,13 +116,21 @@
         setPan(panStartValue + (panStartY - event.clientY) / 100);
     };
 
+    let endPanDrag = () => {};
+
     function handlePanPointerUp() {
         panDragging = false;
+        endPanDrag();
         window.removeEventListener("pointermove", handlePanPointerMove);
         window.removeEventListener("pointerup", handlePanPointerUp);
     };
 
     function handlePanPointerDown(event) {
+        endPanDrag = beginDrag(event);
+        // beginDrag's preventDefault also suppresses the click's default
+        // focus, and this is a tabindex=0 role="slider" — focus it back so
+        // clicking it still leaves it as the focused control.
+        event.currentTarget.focus();
         panDragging = true;
         panStartY = event.clientY;
         panStartValue = pan;

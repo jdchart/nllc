@@ -85,7 +85,13 @@
     .transport {
         display: flex;
         align-items: center;
-        gap: 1rem;
+        /* Wraps rather than overflowing: the mixer pane is user-resizable
+           down to 220px, well below what this row of controls needs on one
+           line, and the pane clips (overflow: hidden) — so without wrapping
+           the Load JSON button simply gets cut in half. */
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem;
+        min-width: 0;
         padding-bottom: 1rem;
         margin-bottom: 1rem;
         border-bottom: 1px solid var(--nllc-border);

@@ -87,7 +87,12 @@
     {/if}
     <div class="params">
         {#each paramEntries as p (p.key)}
-            <button class="param" title="click to insert &quot;{p.key}=&quot; into the console" onclick={() => onInsert(`${p.key}=`)}>{p.key}={p.value.toFixed(2)}</button>
+            <!-- Key and value are separate spans so a long key (probability,
+                 min_gap) truncates while the number it's showing stays
+                 readable — ellipsising the whole string would eat the value. -->
+            <button class="param" title="{p.key}={p.value.toFixed(2)} — click to insert &quot;{p.key}=&quot; into the console" onclick={() => onInsert(`${p.key}=`)}>
+                <span class="param-key">{p.key}</span><span class="param-value">={p.value.toFixed(2)}</span>
+            </button>
         {/each}
     </div>
 </div>
@@ -197,9 +202,12 @@
         display: flex;
         flex-direction: column;
         gap: 0.15rem;
+        min-width: 0;
     }
 
     .param {
+        display: flex;
+        min-width: 0;
         font-family: var(--nllc-font-mono);
         font-size: 0.65rem;
         color: var(--nllc-text-dim);
@@ -208,6 +216,18 @@
         padding: 0;
         cursor: pointer;
         text-align: left;
+    }
+
+    .param-key {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+    }
+
+    .param-value {
+        flex-shrink: 0;
+        white-space: nowrap;
     }
 
     .param:hover {

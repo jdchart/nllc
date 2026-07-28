@@ -1,6 +1,17 @@
 <script>
     import { onMount } from "svelte";
 
+    // Every .json in static/sessions, listed server-side (+page.server.js) —
+    // static assets can't be enumerated from the browser.
+    let { data } = $props();
+
+    // Defaults to the first session until something is picked, rather than
+    // seeding $state from `data` (which would only ever read its initial
+    // value). Same value={...}/onchange={...} shape as the audio selects below.
+    let pickedSlug = $state(null);
+    const selectedSlug = $derived(pickedSlug ?? data.sessions[0]?.slug ?? "");
+    const selectedSession = $derived(data.sessions.find((s) => s.slug === selectedSlug));
+
     // Audio prefs are stored here (localStorage) and picked up by
     // SessionPage.svelte on mount when it constructs its own Ribbit/
     // AudioContext — this page never creates one itself, so there's nothing
@@ -73,10 +84,23 @@
             <span class="session-title">Blank session</span>
             <span class="session-desc">Start from nothing — just the master channel.</span>
         </a>
-        <a class="session-link" href="/code-editor/demo">
-            <span class="session-title">Demo session</span>
-            <span class="session-desc">Auto-loads static/sessions/demo.json — two tracks, a reverb bus, an LFO patch, two saved states.</span>
-        </a>
+        <div class="session-link saved">
+            <span class="session-title">Saved session</span>
+            {#if data.sessions.length === 0}
+                <span class="session-desc">Nothing in static/sessions yet — save one from a session page
+                    with the Save JSON button (or <code>/save_session</code>) and drop it in there.</span>
+            {:else}
+                <select value={selectedSlug} onchange={(e) => pickedSlug = e.target.value} aria-label="Session to load">
+                    {#each data.sessions as session (session.slug)}
+                        <option value={session.slug}>{session.slug}</option>
+                    {/each}
+                </select>
+                <span class="session-desc" class:invalid={selectedSession && !selectedSession.valid}>
+                    {selectedSession?.summary ?? ""}
+                </span>
+                <a class="open" href="/code-editor/{selectedSlug}">Open →</a>
+            {/if}
+        </div>
     </div>
 
     <section class="audio-options">
@@ -160,8 +184,41 @@
         text-decoration: none;
     }
 
-    .session-link:hover {
+    a.session-link:hover {
         border-color: var(--nllc-accent);
+    }
+
+    /* Same card chrome as a session link, but it holds controls rather than
+       being one big click target, so it doesn't get the hover highlight. */
+    .session-link.saved {
+        gap: 0.6rem;
+    }
+
+    .session-link.saved select {
+        background: var(--nllc-bg);
+        color: var(--nllc-text);
+        border: 1px solid var(--nllc-border);
+        border-radius: 4px;
+        padding: 0.4rem 0.5rem;
+        font-family: var(--nllc-font-mono);
+        width: 100%;
+    }
+
+    .session-desc.invalid {
+        color: var(--nllc-meter-hot);
+    }
+
+    .open {
+        align-self: flex-start;
+        margin-top: auto;
+        color: var(--nllc-accent);
+        font-family: var(--nllc-font-mono);
+        font-size: 0.85rem;
+        text-decoration: none;
+    }
+
+    .open:hover {
+        text-decoration: underline;
     }
 
     .session-title {
