@@ -51,8 +51,23 @@ Open `/` — it links to a blank session (`/code-editor`), offers a dropdown of
 every `.json` in `static/sessions/` to open at `/code-editor/<name>`, and has a
 small audio-options panel (output device, latency). Drop a file saved with
 `/save_session` into `static/sessions/` and it appears in that dropdown.
+Each session prints a short readme in the console when it opens, saying what it
+is and which commands to try — so the quickest way in is to open one and read
+what it tells you. `percs-demo` is a four-track drum kit driven by a generated
+rhythm through reverb and delay buses; `euclid-demo` is the same idea built on
+a euclidean grid instead; `euclid-ghosts` runs both generators at once, a fixed
+backbone with quiet off-beat ghost notes around it.
 See the [ribbit tutorial](../ribbit/docs/user/tutorial.md) for a walkthrough of
 your first commands.
+
+### Samples
+
+`static/samples/` is served at `/samples/`, with `kicks/`, `snares/`, `hats/`
+and `percs/` subfolders. The engine's `percsampler` builds a kit by picking
+from those at random, so the app also serves `/samples/manifest.json` (a
+server route that reads the folder — a browser can't list a directory over
+HTTP). Adding a `.wav` to one of those folders is the whole workflow: no code
+change, and no restart under `vite dev`.
 
 ## Building
 

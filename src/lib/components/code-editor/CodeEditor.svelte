@@ -1,4 +1,6 @@
 <script>
+    import { onMount } from "svelte";
+
     // The console: a scrollback log plus a single-line input. Purely a view —
     // it has no idea what a command means, it just calls `onCommand(text)`
     // (createCommandRouter's executeCommand, wired up by the parent page) and
@@ -88,6 +90,20 @@
     // same handle insertAtCursor already uses.
     export function runCommand(text) {
         return runText(text);
+    };
+
+    // Appends output the console didn't ask for. Two kinds arrive this way,
+    // styled differently because they read differently:
+    //   "deferred" — at=beat/at=cycle work reporting back. `/hats stop
+    //     at=cycle` returns "hats will stop (next cycle)" straight away, then
+    //     this lands "hats stopped" a bar later.
+    //   "readme"   — a loaded session introducing itself (see session.js).
+    // Wired to ribbit.onMessage in SessionPage.svelte. Anything unrecognized
+    // falls back to "deferred" rather than being interpolated into the class
+    // attribute as-is.
+    export function appendOutput(text, kind = "deferred") {
+        log.push({ type: kind === "readme" ? "readme" : "deferred", text });
+        queueScroll();
     };
 
     function recallHistory(direction) {
@@ -201,6 +217,16 @@
             if (logEl) logEl.scrollTop = logEl.scrollHeight;
         });
     };
+
+    // The console is what this page is *for*, so it takes the caret on load
+    // and you can start typing immediately. onMount rather than the
+    // `autofocus` attribute (which needs an a11y-rule suppression) or an
+    // $effect (which wouldn't reliably re-run for `inputEl`, a plain
+    // bind:this target rather than $state) — onMount is simply guaranteed to
+    // run once, after the binding is assigned.
+    onMount(() => {
+        inputEl?.focus();
+    });
 </script>
 
 <div class="console">
@@ -257,6 +283,29 @@
 
     .line.output {
         color: var(--nllc-text-dim);
+    }
+
+    /* Deferred output (see appendOutput) — arrives with no command directly
+       above it, so the leading "·" marks it as unprompted rather than the
+       reply to whatever happens to precede it in the scrollback. */
+    .line.deferred {
+        color: var(--nllc-text-dim);
+        opacity: 0.75;
+    }
+
+    .line.deferred::before {
+        content: "· ";
+        color: var(--nllc-accent);
+    }
+
+    /* A session's readme (see appendOutput) — full-brightness and rule-set
+       off, since it's the first thing in an empty scrollback and is meant to
+       be read rather than skimmed past like command output. */
+    .line.readme {
+        color: var(--nllc-text);
+        border-left: 2px solid var(--nllc-accent);
+        padding-left: 0.6rem;
+        margin: 0.25rem 0 0.6rem;
     }
 
     .input-row {

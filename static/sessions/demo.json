@@ -1,5 +1,22 @@
 {
   "version": 1,
+  "readme": [
+    "demo \u2014 a starter session: one melodic track, one drum track, one shared reverb.",
+    "",
+    "  lead    oscsynth (triangle), 4 authored events",
+    "  drums   sampler, 8 authored events",
+    "  fx      reverb bus; the 'wobble' LFO is patched into reverb.wet",
+    "",
+    "Try:",
+    "  /start                     turn the engine on (nothing sounds until you do)",
+    "  /lead waveform=square      swap the oscillator",
+    "  /lead gain=0.2 4b          ramp the fader over 4 beats",
+    "  /lead events               list what it's playing; remove_event=<n> to prune",
+    "  /clock bpm=140 8           ramp the tempo over 8 seconds",
+    "  /patch id=x1 depth=0.6     push the LFO harder into the reverb",
+    "",
+    "Add at=beat or at=cycle to any command to land it on the next boundary."
+  ],
   "clock": {
     "bpm": 120,
     "loopLengthBeats": 4

@@ -28,20 +28,38 @@ audio-options panel.
   contains), and the **audio options** panel (see below).
 - **`/code-editor`** — a **blank session**: nothing but the master channel.
 - **`/code-editor/<name>`** — the same page, auto-loading
-  `static/sessions/<name>.json` on open. `/code-editor/demo` is the one that
-  ships (a couple of tracks, a reverb bus, an LFO patch, a couple of saved
-  states) — good for hearing something immediately or reading as a worked
-  example. Any other `.json` you put in `static/sessions/` gets its own URL the
-  same way, and is listed in the homepage's session dropdown (with a one-line
-  summary of what's in it). If the file is missing or unparseable the page
-  still opens, as an empty session, with a banner saying why.
+  `static/sessions/<name>.json` on open. Four ship:
+  - **`demo`** — a couple of tracks, a reverb bus, an LFO patch.
+  - **`percs-demo`** — a four-track drum kit (kick, snare, hats, percs each on
+    their own track) driven by one `markovpercs` rhythm, through reverb and
+    delay buses.
+  - **`euclid-demo`** — a euclidean drum grid: repeatable structure, four
+    independent layers, with an LFO breathing the pattern in and out.
+  - **`euclid-ghosts`** — a euclidean backbone with a Markov chain adding
+    quiet off-beat ghost notes around it; the worked example of two
+    generators driving one kit.
+
+  Each prints a short readme in the console when it opens, saying what it is
+  and which commands are worth trying. Any other `.json` you put in
+  `static/sessions/` gets its own URL the same way, and is listed in the
+  homepage's session dropdown (with a one-line summary of what's in it). If the
+  file is missing or unparseable the page still opens, as an empty session,
+  with a banner saying why.
 
 A session page has two panes with a collapse arrow and a drag-to-resize handle
 between them.
 
 ## The console (left pane)
 
+- The input is **focused as soon as the page loads** — just start typing.
 - Type a command and press **Enter**; the result is logged to the scrollback.
+- Lines marked with a leading **`·`** arrived on their own, with no command
+  directly above them. That's how deferred work reports back: `/hats stop
+  at=cycle` answers "hats will stop (next cycle)" immediately, then `·  hats
+  stopped` a bar later when it actually happens. Failures come back the same
+  way, so a scheduled change can't fail silently.
+- A session's **readme** (if it has one) is printed on open, set off with an
+  accent rule.
 - **↑ / ↓** browse command history (when the input is empty or already
   mid-browse).
 - **Ghost-text completion**: as you type, a suggested completion is shown inline;
@@ -81,5 +99,14 @@ after.
 
 ### Samples
 
-The engine's `sampler` synth fetches sample files from `/samples/…`; this app
-serves them from `static/samples/`.
+The engine's `sampler` and `percsampler` synths fetch sample files from
+`/samples/…`; this app serves them from `static/samples/`, which has
+`kicks/`, `snares/`, `hats/` and `percs/` subfolders.
+
+`percsampler` builds a kit by choosing from those folders at random, and a
+browser can't list a directory over HTTP, so the app also serves
+`/samples/manifest.json` describing what's there. Practically: **drop a `.wav`
+into one of those four folders and it's immediately in the pool** — no config,
+no restart while the dev server is running. Loose files at the top level of
+`static/samples/` aren't picked up by the manifest, but are still loadable by
+name (that's where `sampler`'s built-in defaults live).

@@ -1,0 +1,349 @@
+{
+  "version": 1,
+  "readme": [
+    "euclid-ghosts \u2014 a euclidean backbone with a Markov chain filling the gaps.",
+    "",
+    "Two generators drive the same four tracks, doing opposite jobs:",
+    "",
+    "  grid    euclidpercs \u2014 the skeleton. Syncopated 3-pulse kick, backbeat snare,",
+    "          quarter-note hats. Identical every pass; this is the thing you can",
+    "          count against.",
+    "  ghosts  markovpercs \u2014 the decoration. Quiet (velocity 0.32) and sparse, and",
+    "          every hit lands off the beat, so it fills gaps instead of competing.",
+    "          Patched to snare/hats/percs only \u2014 never the kick.",
+    "",
+    "Because each track loads only its own category, a ghost hit for a category a",
+    "track doesn't own is simply silent. No filtering, just routing.",
+    "",
+    "Try:",
+    "  /start",
+    "  /grid                      the fixed skeleton",
+    "  /ghosts                    the decoration (..s...sh.sh..ps.)",
+    "  /ghosts velocity=0.6 4b    push the ghosts forward until they compete",
+    "  /ghosts velocity=0.32 4b   and back",
+    "  /ghosts seed=random        re-roll only the decoration; the grid holds",
+    "  /grid dropout=0.4 8b       thin the skeleton and let the ghosts show through",
+    "  /grid preset=fourfloor at=cycle    swap the backbone on the next bar",
+    "",
+    "Mute either one to hear what it was doing: /snare stop at=cycle, or unpatch."
+  ],
+  "clock": {
+    "bpm": 92,
+    "loopLengthBeats": 4
+  },
+  "harmony": {
+    "root": 60,
+    "scale": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "master": {
+    "params": {
+      "gain": 0.9,
+      "pan": 0
+    },
+    "processors": []
+  },
+  "buses": [
+    {
+      "name": "verb",
+      "params": {
+        "gain": 0.75,
+        "pan": 0
+      },
+      "processors": [
+        {
+          "type": "reverb",
+          "name": "plate",
+          "active": true,
+          "options": {
+            "duration": 2.2,
+            "decay": 3.2
+          },
+          "params": {
+            "wet": 1
+          }
+        }
+      ],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ]
+    },
+    {
+      "name": "echo",
+      "params": {
+        "gain": 0.65,
+        "pan": 0
+      },
+      "processors": [
+        {
+          "type": "delay",
+          "name": "tape",
+          "active": true,
+          "options": {
+            "stereoOffset": 0.028
+          },
+          "params": {
+            "time": 0.4891,
+            "feedback": 0.42,
+            "wet": 1
+          }
+        }
+      ],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "kick",
+      "active": true,
+      "params": {
+        "gain": 0.9,
+        "pan": 0
+      },
+      "processors": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {
+          "per_category": 3,
+          "categories": [
+            "kicks"
+          ]
+        },
+        "params": {
+          "dynamics": 0.12,
+          "pan_spread": 0,
+          "speed_spread": 0
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "snare",
+      "active": true,
+      "params": {
+        "gain": 0.72,
+        "pan": 0
+      },
+      "processors": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "verb",
+          "gain": 0.28
+        }
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {
+          "per_category": 3,
+          "categories": [
+            "snares"
+          ]
+        },
+        "params": {
+          "dynamics": 0.35,
+          "pan_spread": 0,
+          "speed_spread": 0.07
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "hats",
+      "active": true,
+      "params": {
+        "gain": 0.48,
+        "pan": 0
+      },
+      "processors": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "echo",
+          "gain": 0.22
+        }
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {
+          "per_category": 3,
+          "categories": [
+            "hats"
+          ]
+        },
+        "params": {
+          "dynamics": 0.5,
+          "pan_spread": 0.6,
+          "speed_spread": 0.22
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "percs",
+      "active": true,
+      "params": {
+        "gain": 0.5,
+        "pan": 0
+      },
+      "processors": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "echo",
+          "gain": 0.4
+        },
+        {
+          "destName": "verb",
+          "gain": 0.22
+        }
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {
+          "per_category": 3,
+          "categories": [
+            "percs"
+          ]
+        },
+        "params": {
+          "dynamics": 0.55,
+          "pan_spread": 0.9,
+          "speed_spread": 0.28
+        },
+        "events": []
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "euclidpercs",
+      "name": "grid",
+      "options": {
+        "preset": "backbeat",
+        "steps": 16,
+        "step_beats": 0.25,
+        "variation": 0.35,
+        "seed": 8675309,
+        "per_category": 3,
+        "kicks": 3,
+        "kicks_rotate": 0,
+        "snares": 2,
+        "snares_rotate": 4,
+        "hats": 4,
+        "hats_rotate": 0,
+        "percs": 0,
+        "percs_rotate": 0
+      },
+      "params": {
+        "velocity": 1,
+        "swing": 0.16,
+        "dropout": 0.05
+      }
+    },
+    {
+      "type": "markovpercs",
+      "name": "ghosts",
+      "options": {
+        "style": "broken",
+        "seed": 99,
+        "steps": 16,
+        "step_beats": 0.25,
+        "density": 0.4,
+        "per_category": 3
+      },
+      "params": {
+        "velocity": 0.32,
+        "swing": 0.16
+      }
+    },
+    {
+      "type": "lfo",
+      "name": "drift",
+      "options": {
+        "waveform": "sine"
+      },
+      "params": {
+        "freq": 0.037
+      }
+    }
+  ],
+  "patches": [
+    {
+      "sourceName": "grid",
+      "destName": "kick.notes",
+      "depth": 0
+    },
+    {
+      "sourceName": "grid",
+      "destName": "snare.notes",
+      "depth": 0
+    },
+    {
+      "sourceName": "grid",
+      "destName": "hats.notes",
+      "depth": 0
+    },
+    {
+      "sourceName": "ghosts",
+      "destName": "snare.notes",
+      "depth": 0
+    },
+    {
+      "sourceName": "ghosts",
+      "destName": "hats.notes",
+      "depth": 0
+    },
+    {
+      "sourceName": "ghosts",
+      "destName": "percs.notes",
+      "depth": 0
+    },
+    {
+      "sourceName": "drift",
+      "destName": "ghosts.velocity",
+      "depth": 0.12
+    },
+    {
+      "sourceName": "drift",
+      "destName": "percs.speed_spread",
+      "depth": 0.12
+    }
+  ],
+  "states": {}
+}

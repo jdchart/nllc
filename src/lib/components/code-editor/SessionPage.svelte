@@ -86,6 +86,13 @@
             nllc.audioContext.setSinkId(outputDeviceId).catch(() => {});
         }
 
+        // Where output from at=beat/at=cycle work lands once it actually
+        // fires — the engine has no other way to reach the console after a
+        // command has returned. Unset, the engine falls back to console.log,
+        // so this is the difference between a deferred failure being visible
+        // in the app and only in devtools.
+        nllc.onMessage = (text, kind) => codeEditor?.appendOutput(text, kind);
+
         nllc_instance = nllc;
         ({ executeCommand, suggest } = createCommandRouter(nllc));
 

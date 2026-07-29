@@ -13,6 +13,7 @@ nllc/  (SvelteKit app)
 ├── src/routes/
 │   ├── +page.svelte                 homepage: blank-session link, session dropdown, audio options
 │   ├── +page.server.js              lists static/sessions/*.json for that dropdown
+│   ├── samples/manifest.json/+server.js   lists static/samples/ by category, for percsampler
 │   └── code-editor/
 │       ├── +page.svelte             blank session
 │       └── [session]/+page.svelte   auto-loads /sessions/<slug>.json
@@ -43,6 +44,14 @@ tracks graph mutations. The engine's arrays are intentionally plain/non-reactive
 this poll-and-diff is the bridge. Every other component gets the engine (or
 derived data) via props.
 
+It also sets `engine.onMessage = (text, kind) => codeEditor?.appendOutput(text,
+kind)` — the reverse direction, for output no command is waiting on. Two kinds
+arrive: `"deferred"` (an `at=beat`/`at=cycle` command reporting back after it
+fires, rendered with a leading `·`) and `"readme"` (a loaded session's
+introduction, rendered as an accent-ruled block). Unset, the engine falls back
+to `console.log`, so wiring this is what makes a deferred failure visible in
+the app.
+
 ## Dependency
 
 `ribbit` is an npm workspace member (root `package.json` lists `["ribbit",
@@ -65,7 +74,19 @@ Homepage writes `localStorage` keys `nllc:audioLatencyHint` /
   added — not here. See `ribbit/docs/dev/`.
 - The session dropdown is filled by a *server* load, so under `vite dev` it
   re-reads `static/sessions/` on every request (drop a file in, refresh, it's
-  there) but a production build bakes the list at build/prerender time.
+  there) but a production build bakes the list at build/prerender time. The
+  sample manifest route has the same property.
+- `/samples/manifest.json` is the app's side of a contract the *engine*
+  defines: `percsampler` picks its kit at random and a browser can't list a
+  directory over HTTP, so the host must publish `{ kicks, snares, hats, percs }`
+  arrays of paths relative to `/samples/`. Adding a `.wav` to
+  `static/samples/<category>/` is the whole workflow — no code change.
+- Session files carry an optional top-level `readme` (an array of lines) that
+  the engine prints on load via `onMessage`. All four shipped sessions
+  (`demo`, `percs-demo`, `euclid-demo`, `euclid-ghosts`) have one; a new one
+  should too.
+- `CodeEditor` focuses its input in `onMount`, so the page is type-ready on
+  load.
 - `SessionPage` must call `engine.dispose()` when it unmounts — an
   `AudioContext` and the clock's `setTimeout` loop are not reachable by GC, so
   without it a client-side navigation leaves the session playing.

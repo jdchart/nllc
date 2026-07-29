@@ -33,7 +33,14 @@ Everything that touches the engine lives in **one** file:
 4. Tears the engine down in its `onMount` cleanup (`engine.dispose()`) — the
    `AudioContext` and the clock's timer loop outlive the component otherwise,
    so navigating back to the homepage would leave the session playing.
-5. **Polls** `engine.tracks/buses/modulators/patches` on each animation frame and
+5. Wires `engine.onMessage` to `CodeEditor.appendOutput`, the channel for
+   output that arrives with no command waiting on it — deferred `at=beat`/
+   `at=cycle` work reporting back (`kind: "deferred"`, rendered with a leading
+   `·`) and a loaded session's readme (`kind: "readme"`, rendered as an
+   accent-ruled block). Unset, the engine falls back to `console.log`, so this
+   is the difference between a deferred failure being visible in the app and
+   only in devtools.
+6. **Polls** `engine.tracks/buses/modulators/patches` on each animation frame and
    diffs them by element identity, copying into `$state` arrays so the mixer
    re-renders when the console (or a load) mutates the graph. The engine's arrays
    are plain and non-reactive by design — this poll-and-diff is the bridge.
@@ -58,6 +65,19 @@ derived data) as props and call its methods.
   `static/` isn't in the module graph and a browser can't list a directory over
   HTTP, so this has to be a *server* load; it also parses each file to build the
   one-line summary shown under the dropdown.
+- `samples/manifest.json/+server.js` — a `GET` endpoint returning what's in
+  `static/samples/`, grouped by the four categories the engine's `percsampler`
+  knows (`kicks`, `snares`, `hats`, `percs`), each entry a path relative to
+  `/samples/`. Same directory-listing constraint as the session dropdown above,
+  and the app's side of a contract the engine defines: `percsampler` fills its
+  kit at random and so has to be told what the candidates are. Serving audio
+  files under `/samples/` was already the host's job; this is the same job
+  extended. A missing category folder is reported as an empty array rather
+  than failing the request, since the engine copes with an empty category but
+  not with a broken response. Note the route deliberately sits *under*
+  `/samples/` alongside the files it describes, which only resolves as long as
+  no literal `static/samples/manifest.json` exists to shadow it — static files
+  win over routes.
 
 ## Components
 
@@ -66,8 +86,13 @@ derived data) as props and call its methods.
 - `CodeEditor.svelte` — the console: a text input plus scrollback. It's
   engine-agnostic — it just calls `onCommand(text)` and logs the returned string,
   and calls `onSuggest(text, cursorPos)` for ghost-text completion. Owns command
-  history (↑/↓) and the ghost overlay; exposes `insertAtCursor` / `runCommand` so
-  the mixer can paste names and the transport can run save/load.
+  history (↑/↓) and the ghost overlay; exposes `insertAtCursor` / `runCommand` /
+  `appendOutput` so the mixer can paste names, the transport can run save/load,
+  and the engine can push output no command is waiting on (below). Focuses its
+  input in `onMount` — the console is what the page is for, so it takes the
+  caret immediately. (`onMount` rather than the `autofocus` attribute, which
+  needs an a11y suppression, or an `$effect`, which wouldn't reliably track
+  `inputEl` — a plain `bind:this` target, not `$state`.)
 
 **mixer/**
 - `Mixer.svelte` — a read/write view of the live graph; lays out channel strips,
@@ -100,10 +125,26 @@ wired to anything.
 
 ## Static assets
 
-`static/samples/` holds the drum samples the engine's `sampler` fetches from
-`/samples/…`. `static/sessions/` holds session JSON files: each one is both a
+`static/samples/` holds the drum samples the engine's `sampler` and
+`percsampler` fetch from `/samples/…`. Its four subfolders — `kicks/`,
+`snares/`, `hats/`, `percs/` — are the categories `percsampler` builds a kit
+from, and are enumerated by the manifest route above; loose files at the top
+level are ignored by the manifest but still fetchable by name (that's where
+`sampler`'s defaults live). Adding or removing a `.wav` needs no code change
+and no rebuild under `vite dev`.
+
+`static/sessions/` holds session JSON files: each one is both a
 `/code-editor/<name>` route and an entry in the homepage dropdown, purely by
-being in that folder.
+being in that folder. Four ship: `demo.json`, `percs-demo.json` (four
+category-restricted `percsampler` tracks fed by one `markovpercs`, through
+reverb and delay buses), `euclid-demo.json` (the euclidean grid generator),
+and `euclid-ghosts.json` (a euclidean backbone plus a Markov ghost layer on
+the same tracks).
+
+Each carries a top-level **`readme`** — an array of lines the engine prints to
+the console on load (see `ribbit`'s `session.js`). It's the right place for
+what the session is and which commands to try; `/save_json` round-trips it. A
+new session file should have one.
 
 ## Styling
 

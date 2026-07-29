@@ -1,0 +1,312 @@
+{
+  "version": 1,
+  "readme": [
+    "percs-demo \u2014 a Markov drum machine across four separately-mixed kit tracks.",
+    "",
+    "One 'rhy' generator (markovpercs) feeds all four tracks; each track loads only",
+    "its own category, so every drum gets its own inserts, sends and fader.",
+    "",
+    "  kick    dry                     snare   -> verb",
+    "  hats    -> echo                 percs   -> echo + verb",
+    "  drift   LFO on hats.pan_spread and percs.speed_spread",
+    "",
+    "The kit is re-rolled from the sample library on every load, so it sounds",
+    "different each time \u2014 the pattern is fixed by the seed, the samples are not.",
+    "",
+    "Try:",
+    "  /start",
+    "  /rhy                       print the generated pattern (.sk.HhshSp.s...k)",
+    "  /rhy seed=random           new rhythm, same character",
+    "  /rhy style=rolling         sparse | rolling | broken | kickheavy | chaotic",
+    "  /rhy swing=0.2 4b          ramp the shuffle in",
+    "  /hats samples=random       re-roll just the hats",
+    "  /percs speed_spread=0.6    more tape-speed variation per hit",
+    "",
+    "A first-order chain has no idea where in the bar it is, so it can't hold a",
+    "downbeat \u2014 that's what euclid-demo is for."
+  ],
+  "clock": {
+    "bpm": 124,
+    "loopLengthBeats": 4
+  },
+  "harmony": {
+    "root": 60,
+    "scale": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "master": {
+    "params": {
+      "gain": 0.9,
+      "pan": 0
+    },
+    "processors": []
+  },
+  "buses": [
+    {
+      "name": "verb",
+      "params": {
+        "gain": 0.8,
+        "pan": 0
+      },
+      "processors": [
+        {
+          "type": "reverb",
+          "name": "plate",
+          "active": true,
+          "options": {
+            "duration": 1.8,
+            "decay": 3.5
+          },
+          "params": {
+            "wet": 1
+          }
+        }
+      ],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ]
+    },
+    {
+      "name": "echo",
+      "params": {
+        "gain": 0.7,
+        "pan": 0
+      },
+      "processors": [
+        {
+          "type": "delay",
+          "name": "slap",
+          "active": true,
+          "options": {
+            "stereoOffset": 0.017
+          },
+          "params": {
+            "time": 0.3629,
+            "feedback": 0.38,
+            "wet": 1
+          }
+        }
+      ],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "kick",
+      "active": true,
+      "params": {
+        "gain": 0.85,
+        "pan": 0
+      },
+      "processors": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {
+          "per_category": 2,
+          "categories": [
+            "kicks"
+          ]
+        },
+        "params": {
+          "dynamics": 0.15,
+          "pan_spread": 0,
+          "speed_spread": 0
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "snare",
+      "active": true,
+      "params": {
+        "gain": 0.7,
+        "pan": 0
+      },
+      "processors": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "verb",
+          "gain": 0.35
+        }
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {
+          "per_category": 2,
+          "categories": [
+            "snares"
+          ]
+        },
+        "params": {
+          "dynamics": 0.3,
+          "pan_spread": 0,
+          "speed_spread": 0.08
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "hats",
+      "active": true,
+      "params": {
+        "gain": 0.55,
+        "pan": 0
+      },
+      "processors": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "echo",
+          "gain": 0.25
+        }
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {
+          "per_category": 2,
+          "categories": [
+            "hats"
+          ]
+        },
+        "params": {
+          "dynamics": 0.45,
+          "pan_spread": 0.5,
+          "speed_spread": 0.18
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "percs",
+      "active": true,
+      "params": {
+        "gain": 0.5,
+        "pan": 0
+      },
+      "processors": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "echo",
+          "gain": 0.4
+        },
+        {
+          "destName": "verb",
+          "gain": 0.2
+        }
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {
+          "per_category": 2,
+          "categories": [
+            "percs"
+          ]
+        },
+        "params": {
+          "dynamics": 0.5,
+          "pan_spread": 0.85,
+          "speed_spread": 0.25
+        },
+        "events": []
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "markovpercs",
+      "name": "rhy",
+      "options": {
+        "style": "broken",
+        "seed": 31415,
+        "steps": 16,
+        "step_beats": 0.25,
+        "density": 0.8,
+        "per_category": 2
+      },
+      "params": {
+        "velocity": 0.9,
+        "swing": 0.18
+      }
+    },
+    {
+      "type": "lfo",
+      "name": "drift",
+      "options": {
+        "waveform": "sine"
+      },
+      "params": {
+        "freq": 0.06
+      }
+    }
+  ],
+  "patches": [
+    {
+      "sourceName": "rhy",
+      "destName": "kick.notes",
+      "depth": 0
+    },
+    {
+      "sourceName": "rhy",
+      "destName": "snare.notes",
+      "depth": 0
+    },
+    {
+      "sourceName": "rhy",
+      "destName": "hats.notes",
+      "depth": 0
+    },
+    {
+      "sourceName": "rhy",
+      "destName": "percs.notes",
+      "depth": 0
+    },
+    {
+      "sourceName": "drift",
+      "destName": "hats.pan_spread",
+      "depth": 0.4
+    },
+    {
+      "sourceName": "drift",
+      "destName": "percs.speed_spread",
+      "depth": 0.15
+    }
+  ],
+  "states": {}
+}
