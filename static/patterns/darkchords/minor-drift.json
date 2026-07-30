@@ -1,0 +1,11 @@
+{
+  "name": "minor drift",
+  "kind": "notes",
+  "step_beats": 1,
+  "duration": 2,
+  "velocity": 0.55,
+  "sequence": [
+    "0,3,7", ".", "-4,0,3", ".",
+    "3,7,10", ".", "-2,2,5", "."
+  ]
+}

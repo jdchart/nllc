@@ -1,0 +1,12 @@
+{
+  "name": "laid back",
+  "kind": "drums",
+  "step_beats": 0.25,
+  "velocity": 0.8,
+  "lanes": {
+    "kicks":  "x..x .... x... ....",
+    "snares": ".... x... .... x...",
+    "hats":   "x.x.",
+    "percs":  ".... ..x. .... ..x."
+  }
+}

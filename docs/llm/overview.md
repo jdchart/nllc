@@ -14,6 +14,7 @@ nllc/  (SvelteKit app)
 │   ├── +page.svelte                 homepage: blank-session link, session dropdown, audio options
 │   ├── +page.server.js              lists static/sessions/*.json for that dropdown
 │   ├── samples/manifest.json/+server.js   lists static/samples/ by category, for percsampler
+│   ├── patterns/manifest.json/+server.js  lists static/patterns/ by pack, for patternvariator
 │   └── code-editor/
 │       ├── +page.svelte             blank session
 │       └── [session]/+page.svelte   auto-loads /sessions/<slug>.json
@@ -24,7 +25,8 @@ nllc/  (SvelteKit app)
 ├── src/lib/scripts/
 │   ├── ollama.js                    Ollama() stub — future NL→command layer
 │   └── drag.js                      beginDrag(): shared pointer-drag selection suppression
-└── static/{samples,sessions}/       drum samples served at /samples; session JSON
+└── static/{samples,sessions,patterns}/   drum samples at /samples; session JSON;
+                                          hand-written pattern packs at /patterns
 ```
 
 ## Engine integration (the one thing to know)
@@ -81,10 +83,22 @@ Homepage writes `localStorage` keys `nllc:audioLatencyHint` /
   directory over HTTP, so the host must publish `{ kicks, snares, hats, percs }`
   arrays of paths relative to `/samples/`. Adding a `.wav` to
   `static/samples/<category>/` is the whole workflow — no code change.
+- `/patterns/manifest.json` is the app's side of a second engine contract, the
+  same shape as the samples one: `patternvariator` loads a hand-written pattern
+  by pack and name, and a browser can't list a directory, so the host publishes
+  `{ <pack>: ["<pack>/<name>.json", ...] }`. The difference from samples is that
+  **pack names aren't fixed** — every subdirectory is a pack, so adding
+  `static/patterns/<pack>/<name>.json` and refreshing is the whole workflow, no
+  code change. Three packs ship: `hiphopdrums` (drum lanes), `darkchords` and
+  `melodies` (scale degrees). The format is documented in
+  `ribbit/docs/llm/overview.md`; the files are meant to be hand-edited.
 - Session files carry an optional top-level `readme` (an array of lines) that
-  the engine prints on load via `onMessage`. All four shipped sessions
-  (`demo`, `percs-demo`, `euclid-demo`, `euclid-ghosts`) have one; a new one
-  should too.
+  the engine prints on load via `onMessage`. All six shipped sessions
+  (`demo`, `percs-demo`, `euclid-demo`, `euclid-ghosts`, `pattern-chords`,
+  `pattern-drums`) have one; a new one should too.
+- Session JSON is stored width-budget-compacted (short objects/arrays inlined,
+  `readme` one line per element) rather than one value per line. Nothing reads
+  the formatting, but the files are meant to be legible when hand-edited.
 - `CodeEditor` focuses its input in `onMount`, so the page is type-ready on
   load.
 - `SessionPage` must call `engine.dispose()` when it unmounts — an

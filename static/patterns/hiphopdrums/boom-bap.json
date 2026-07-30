@@ -1,0 +1,11 @@
+{
+  "name": "boom bap",
+  "kind": "drums",
+  "step_beats": 0.25,
+  "velocity": 0.9,
+  "lanes": {
+    "kicks":  "x... ..x. ..x. ....",
+    "snares": ".... x... .... x...",
+    "hats":   "x.x. x.x. x.x. x.x."
+  }
+}

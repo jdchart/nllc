@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "readme": [
+    "pattern-drums — hand-written drum patterns, varied on the fly.",
+    "",
+    "One percsampler kit split across four tracks, so each part gets its own",
+    "fader and sends, driven by two patternvariators reading JSON out of",
+    "static/patterns/hiphopdrums/:",
+    "",
+    "  beat    boom-bap    the backbone, lightly varied",
+    "  extra   polymeter   a 6-step hat lane phasing against the 16-step bar",
+    "  kick / snare / hats / percs   the four kit tracks",
+    "  verb    reverb bus; echo  delay bus",
+    "",
+    "A 'drums' pattern is one character lane per category:",
+    "",
+    "    kicks:  x... ..x. ..x. ....",
+    "    snares: .... x... .... x...",
+    "    hats:   x.x. x.x. x.x. x.x.",
+    "",
+    "x is a hit, X an accent, g a ghost, a digit picks a sample slot, . is a",
+    "rest — and spaces are ignored, so you can group the bar however you read",
+    "it. A lane cycles at its own length, which is why 'hats: x.x.' covers all",
+    "16 steps and why polymeter's 6-step hat lane drifts against the bar.",
+    "",
+    "Try:",
+    "  /start",
+    "  /beat                      show the varied grid, one row per category",
+    "  /beat variation=0.8        skips, ghosts, hits nudged off the grid",
+    "  /beat seed=random          another take at the same amount",
+    "  /beat pattern=halftime     a different pattern from the same pack",
+    "  /beat density=0.6          thin it out without changing its character",
+    "  /extra density=0           mute the phasing layer (a modulator has no stop)",
+    "  /hats pan_spread=0.9 8b    open the hats across the field",
+    "  /beat swing=0.18 4b        ride the swing up",
+    "",
+    "Both variators drive the same four tracks. Nothing special is needed for",
+    "that — a track only rejects an exact duplicate patch, so layering a second",
+    "generator over the first is just a second /patch."
+  ],
+  "clock": {"bpm": 88, "loopLengthBeats": 4},
+  "harmony": {"root": 60, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
+  "master": {"params": {"gain": 0.9, "pan": 0}, "processors": []},
+  "buses": [
+    {
+      "name": "verb",
+      "params": {"gain": 0.7, "pan": 0},
+      "processors": [
+        {
+          "type": "reverb",
+          "name": "room",
+          "active": true,
+          "options": {"duration": 1.8, "decay": 3.2},
+          "params": {"wet": 1}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    },
+    {
+      "name": "echo",
+      "params": {"gain": 0.5, "pan": 0},
+      "processors": [
+        {
+          "type": "delay",
+          "name": "slap",
+          "active": true,
+          "options": {"stereoOffset": 0.008},
+          "params": {"time": 0.34, "feedback": 0.3, "wet": 1}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "kick",
+      "active": true,
+      "params": {"gain": 0.9, "pan": 0},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}],
+      "synth": {
+        "type": "percsampler",
+        "options": {"per_category": 3, "categories": ["kicks"]},
+        "params": {"dynamics": 0.12, "pan_spread": 0, "speed_spread": 0},
+        "events": []
+      }
+    },
+    {
+      "name": "snare",
+      "active": true,
+      "params": {"gain": 0.7, "pan": 0},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "verb", "gain": 0.35}],
+      "synth": {
+        "type": "percsampler",
+        "options": {"per_category": 3, "categories": ["snares"]},
+        "params": {"dynamics": 0.3, "pan_spread": 0, "speed_spread": 0.05},
+        "events": []
+      }
+    },
+    {
+      "name": "hats",
+      "active": true,
+      "params": {"gain": 0.45, "pan": 0},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "echo", "gain": 0.18}],
+      "synth": {
+        "type": "percsampler",
+        "options": {"per_category": 3, "categories": ["hats"]},
+        "params": {"dynamics": 0.45, "pan_spread": 0.5, "speed_spread": 0.18},
+        "events": []
+      }
+    },
+    {
+      "name": "percs",
+      "active": true,
+      "params": {"gain": 0.5, "pan": 0},
+      "processors": [],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "echo", "gain": 0.3},
+        {"destName": "verb", "gain": 0.25}
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {"per_category": 3, "categories": ["percs"]},
+        "params": {"dynamics": 0.5, "pan_spread": 0.8, "speed_spread": 0.22},
+        "events": []
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "patternvariator",
+      "name": "beat",
+      "options": {
+        "pack": "hiphopdrums",
+        "pattern": "boom-bap",
+        "seed": 20260730,
+        "variation": 0.3,
+        "density": 1,
+        "step_beats": 0.25,
+        "transpose": 0,
+        "per_category": 3
+      },
+      "params": {"velocity": 1, "swing": 0.14}
+    },
+    {
+      "type": "patternvariator",
+      "name": "extra",
+      "options": {
+        "pack": "hiphopdrums",
+        "pattern": "polymeter",
+        "seed": 31337,
+        "variation": 0.5,
+        "density": 0.7,
+        "step_beats": 0.25,
+        "transpose": 0,
+        "per_category": 3
+      },
+      "params": {"velocity": 0.4, "swing": 0.14}
+    }
+  ],
+  "patches": [
+    {"sourceName": "beat", "destName": "kick.notes", "depth": 0},
+    {"sourceName": "beat", "destName": "snare.notes", "depth": 0},
+    {"sourceName": "beat", "destName": "hats.notes", "depth": 0},
+    {"sourceName": "beat", "destName": "percs.notes", "depth": 0},
+    {"sourceName": "extra", "destName": "hats.notes", "depth": 0},
+    {"sourceName": "extra", "destName": "percs.notes", "depth": 0}
+  ],
+  "states": {}
+}

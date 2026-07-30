@@ -1,0 +1,142 @@
+{
+  "version": 1,
+  "readme": [
+    "pattern-chords — hand-written chords and melodies, varied on the fly.",
+    "",
+    "Two karplus (plucked string) tracks, each driven by a patternvariator",
+    "reading a JSON pattern out of static/patterns/:",
+    "",
+    "  keys    darkchords/seventh-fall   Cm7 - Abmaj7 - Fm7 - G7, one chord every 2 beats",
+    "  pluck   melodies/arp-cell         a 16th-note arpeggio over the same harmony",
+    "  verb    reverb bus; echo  delay bus",
+    "",
+    "A pattern file is a step grid you edit by hand. 'notes' patterns are one",
+    "token per step, a token being comma-separated scale degrees ('0,3,7' is a",
+    "triad, '.' is a rest). Degrees resolve against the shared harmony context",
+    "at trigger time, so the whole thing retunes live.",
+    "",
+    "Try:",
+    "  /start",
+    "  /chords                    show the varied chord sequence",
+    "  /chords variation=0.8      revoice it harder (inversions, octave leaps)",
+    "  /chords seed=random        another take at the same amount",
+    "  /chords pattern=nocturne   a different progression from the same pack",
+    "  /lead pattern=descending   swap the melody",
+    "  /harmony root=57           move the whole thing to A",
+    "  /keys brightness=0.1 8b    darken the strings over 8 beats",
+    "  /keys damping=0.9 8b       and let them go dull",
+    "  /chords transpose=3        shift the chords up a minor third, diatonically",
+    "",
+    "variation is an option, not a param: it re-rolls a seeded take when you set",
+    "it, and then holds still. Nothing here changes until you ask it to."
+  ],
+  "clock": {"bpm": 84, "loopLengthBeats": 8},
+  "harmony": {"root": 60, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
+  "master": {"params": {"gain": 0.9, "pan": 0}, "processors": []},
+  "buses": [
+    {
+      "name": "verb",
+      "params": {"gain": 0.8, "pan": 0},
+      "processors": [
+        {
+          "type": "reverb",
+          "name": "hall",
+          "active": true,
+          "options": {"duration": 3.5, "decay": 2.4},
+          "params": {"wet": 1}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    },
+    {
+      "name": "echo",
+      "params": {"gain": 0.6, "pan": 0},
+      "processors": [
+        {
+          "type": "delay",
+          "name": "tape",
+          "active": true,
+          "options": {"stereoOffset": 0.012},
+          "params": {"time": 0.53, "feedback": 0.42, "wet": 1}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "keys",
+      "active": true,
+      "params": {"gain": 0.65, "pan": -0.15},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "verb", "gain": 0.45}],
+      "synth": {
+        "type": "karplus",
+        "options": {"excitation": "noise"},
+        "params": {"damping": 0.45, "decay": 3.2, "brightness": 0.5},
+        "events": []
+      }
+    },
+    {
+      "name": "pluck",
+      "active": true,
+      "params": {"gain": 0.5, "pan": 0.25},
+      "processors": [],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "echo", "gain": 0.4},
+        {"destName": "verb", "gain": 0.2}
+      ],
+      "synth": {
+        "type": "karplus",
+        "options": {"excitation": "pulse"},
+        "params": {"damping": 0.2, "decay": 1.4, "brightness": 0.85},
+        "events": []
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "patternvariator",
+      "name": "chords",
+      "options": {
+        "pack": "darkchords",
+        "pattern": "seventh-fall",
+        "seed": 20260730,
+        "variation": 0.35,
+        "density": 1,
+        "step_beats": 1,
+        "transpose": 0,
+        "per_category": 4
+      },
+      "params": {"velocity": 0.9, "swing": 0}
+    },
+    {
+      "type": "patternvariator",
+      "name": "lead",
+      "options": {
+        "pack": "melodies",
+        "pattern": "arp-cell",
+        "seed": 4242,
+        "variation": 0.45,
+        "density": 0.85,
+        "step_beats": 0.25,
+        "transpose": 0,
+        "per_category": 4
+      },
+      "params": {"velocity": 0.7, "swing": 0.08}
+    },
+    {
+      "type": "lfo",
+      "name": "sway",
+      "options": {"waveform": "sine"},
+      "params": {"freq": 0.045}
+    }
+  ],
+  "patches": [
+    {"sourceName": "chords", "destName": "keys.notes", "depth": 0},
+    {"sourceName": "lead", "destName": "pluck.notes", "depth": 0},
+    {"sourceName": "sway", "destName": "keys.brightness", "depth": 0.25}
+  ],
+  "states": {}
+}

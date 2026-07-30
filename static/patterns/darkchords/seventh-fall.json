@@ -1,0 +1,11 @@
+{
+  "name": "seventh fall",
+  "kind": "notes",
+  "step_beats": 1,
+  "duration": 2.5,
+  "velocity": 0.5,
+  "sequence": [
+    "0,3,7,10", ".", "-4,0,3,7", ".",
+    "-7,-4,0,3", ".", "-5,-1,2,5", "."
+  ]
+}

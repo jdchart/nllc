@@ -1,0 +1,12 @@
+{
+  "name": "dusty",
+  "kind": "drums",
+  "step_beats": 0.25,
+  "velocity": 0.85,
+  "lanes": {
+    "kicks":  "x..x ..x. .... x...",
+    "snares": "...g x... ...g x...",
+    "hats":   "x.xx x.x. x.xx x.x.",
+    "percs":  ".... .... ..x. ...."
+  }
+}

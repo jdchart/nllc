@@ -1,7 +1,7 @@
 {
   "version": 1,
   "readme": [
-    "demo \u2014 a starter session: one melodic track, one drum track, one shared reverb.",
+    "demo — a starter session: one melodic track, one drum track, one shared reverb.",
     "",
     "  lead    oscsynth (triangle), 4 authored events",
     "  drums   sampler, 8 authored events",
@@ -17,385 +17,128 @@
     "",
     "Add at=beat or at=cycle to any command to land it on the next boundary."
   ],
-  "clock": {
-    "bpm": 120,
-    "loopLengthBeats": 4
-  },
-  "harmony": {
-    "root": 60,
-    "scale": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11
-    ]
-  },
-  "master": {
-    "params": {
-      "gain": 1,
-      "pan": 0
-    },
-    "processors": []
-  },
+  "clock": {"bpm": 120, "loopLengthBeats": 4},
+  "harmony": {"root": 60, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
+  "master": {"params": {"gain": 1, "pan": 0}, "processors": []},
   "buses": [
     {
       "name": "fx",
-      "params": {
-        "gain": 1,
-        "pan": 0
-      },
+      "params": {"gain": 1, "pan": 0},
       "processors": [
         {
           "type": "reverb",
           "name": "reverb",
           "active": true,
-          "options": {
-            "duration": 2.5,
-            "decay": 3
-          },
-          "params": {
-            "wet": 0.4000000059604645
-          }
+          "options": {"duration": 2.5, "decay": 3},
+          "params": {"wet": 0.400000006}
         }
       ],
-      "sends": [
-        {
-          "destName": "master",
-          "gain": 1
-        }
-      ]
+      "sends": [{"destName": "master", "gain": 1}]
     }
   ],
   "tracks": [
     {
       "name": "lead",
       "active": true,
-      "params": {
-        "gain": 0.749999999231994,
-        "pan": 0
-      },
+      "params": {"gain": 0.749999999, "pan": 0},
       "processors": [],
-      "sends": [
-        {
-          "destName": "master",
-          "gain": 1
-        },
-        {
-          "destName": "fx",
-          "gain": 0.30000001192092896
-        }
-      ],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "fx", "gain": 0.300000012}],
       "synth": {
         "type": "oscsynth",
-        "options": {
-          "waveform": "triangle"
-        },
+        "options": {"waveform": "triangle"},
         "params": {},
         "events": [
-          {
-            "beat": 0,
-            "pitch": 48,
-            "velocity": 0.5,
-            "duration": 0.5
-          },
-          {
-            "beat": 1,
-            "pitch": 50,
-            "velocity": 0.5,
-            "duration": 0.5
-          },
-          {
-            "beat": 2,
-            "pitch": 52,
-            "velocity": 0.5,
-            "duration": 0.5
-          },
-          {
-            "beat": 3,
-            "pitch": 55,
-            "velocity": 0.5,
-            "duration": 0.5
-          }
+          {"beat": 0, "pitch": 48, "velocity": 0.5, "duration": 0.5},
+          {"beat": 1, "pitch": 50, "velocity": 0.5, "duration": 0.5},
+          {"beat": 2, "pitch": 52, "velocity": 0.5, "duration": 0.5},
+          {"beat": 3, "pitch": 55, "velocity": 0.5, "duration": 0.5}
         ]
       }
     },
     {
       "name": "drums",
       "active": true,
-      "params": {
-        "gain": 0.7999999931550191,
-        "pan": 0
-      },
+      "params": {"gain": 0.799999993, "pan": 0},
       "processors": [],
-      "sends": [
-        {
-          "destName": "master",
-          "gain": 1
-        }
-      ],
+      "sends": [{"destName": "master", "gain": 1}],
       "synth": {
         "type": "sampler",
         "options": {},
         "params": {},
         "events": [
-          {
-            "beat": 0,
-            "pitch": 0,
-            "velocity": 0.9,
-            "duration": 0.2
-          },
-          {
-            "beat": 0.5,
-            "pitch": 4,
-            "velocity": 0.4,
-            "duration": 0.2
-          },
-          {
-            "beat": 1,
-            "pitch": 2,
-            "velocity": 0.8,
-            "duration": 0.2
-          },
-          {
-            "beat": 1.5,
-            "pitch": 4,
-            "velocity": 0.4,
-            "duration": 0.2
-          },
-          {
-            "beat": 2,
-            "pitch": 0,
-            "velocity": 0.9,
-            "duration": 0.2
-          },
-          {
-            "beat": 2.5,
-            "pitch": 4,
-            "velocity": 0.4,
-            "duration": 0.2
-          },
-          {
-            "beat": 3,
-            "pitch": 2,
-            "velocity": 0.8,
-            "duration": 0.2
-          },
-          {
-            "beat": 3.5,
-            "pitch": 4,
-            "velocity": 0.4,
-            "duration": 0.2
-          }
+          {"beat": 0, "pitch": 0, "velocity": 0.9, "duration": 0.2},
+          {"beat": 0.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
+          {"beat": 1, "pitch": 2, "velocity": 0.8, "duration": 0.2},
+          {"beat": 1.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
+          {"beat": 2, "pitch": 0, "velocity": 0.9, "duration": 0.2},
+          {"beat": 2.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
+          {"beat": 3, "pitch": 2, "velocity": 0.8, "duration": 0.2},
+          {"beat": 3.5, "pitch": 4, "velocity": 0.4, "duration": 0.2}
         ]
       }
     }
   ],
-  "modulators": [
-    {
-      "type": "lfo",
-      "name": "wobble",
-      "options": {
-        "waveform": "sine"
-      },
-      "params": {
-        "freq": 0.25
-      }
-    }
-  ],
-  "patches": [
-    {
-      "sourceName": "wobble",
-      "destName": "reverb.wet",
-      "depth": 0.15000000596046448
-    }
-  ],
+  "modulators": [{"type": "lfo", "name": "wobble", "options": {"waveform": "sine"}, "params": {"freq": 0.25}}],
+  "patches": [{"sourceName": "wobble", "destName": "reverb.wet", "depth": 0.150000006}],
   "states": {
     "full": {
-      "clock": {
-        "bpm": 120,
-        "loopLengthBeats": 4
-      },
-      "harmony": {
-        "root": 60,
-        "scale": [
-          0,
-          1,
-          2,
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10,
-          11
-        ]
-      },
-      "master": {
-        "params": {
-          "gain": 1,
-          "pan": 0
-        },
-        "processors": []
-      },
+      "clock": {"bpm": 120, "loopLengthBeats": 4},
+      "harmony": {"root": 60, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
+      "master": {"params": {"gain": 1, "pan": 0}, "processors": []},
       "buses": [
         {
           "name": "fx",
-          "params": {
-            "gain": 1,
-            "pan": 0
-          },
+          "params": {"gain": 1, "pan": 0},
           "processors": [
             {
               "type": "reverb",
               "name": "reverb",
               "active": true,
-              "options": {
-                "duration": 2.5,
-                "decay": 3
-              },
-              "params": {
-                "wet": 0.4000000059604645
-              }
+              "options": {"duration": 2.5, "decay": 3},
+              "params": {"wet": 0.400000006}
             }
           ],
-          "sends": [
-            {
-              "destName": "master",
-              "gain": 1
-            }
-          ]
+          "sends": [{"destName": "master", "gain": 1}]
         }
       ],
       "tracks": [
         {
           "name": "lead",
           "active": true,
-          "params": {
-            "gain": 0.749999999231994,
-            "pan": 0
-          },
+          "params": {"gain": 0.749999999, "pan": 0},
           "processors": [],
-          "sends": [
-            {
-              "destName": "master",
-              "gain": 1
-            },
-            {
-              "destName": "fx",
-              "gain": 0.30000001192092896
-            }
-          ],
+          "sends": [{"destName": "master", "gain": 1}, {"destName": "fx", "gain": 0.300000012}],
           "synth": {
             "type": "oscsynth",
-            "options": {
-              "waveform": "triangle"
-            },
+            "options": {"waveform": "triangle"},
             "params": {},
             "events": [
-              {
-                "beat": 0,
-                "pitch": 48,
-                "velocity": 0.5,
-                "duration": 0.5
-              },
-              {
-                "beat": 1,
-                "pitch": 50,
-                "velocity": 0.5,
-                "duration": 0.5
-              },
-              {
-                "beat": 2,
-                "pitch": 52,
-                "velocity": 0.5,
-                "duration": 0.5
-              },
-              {
-                "beat": 3,
-                "pitch": 55,
-                "velocity": 0.5,
-                "duration": 0.5
-              }
+              {"beat": 0, "pitch": 48, "velocity": 0.5, "duration": 0.5},
+              {"beat": 1, "pitch": 50, "velocity": 0.5, "duration": 0.5},
+              {"beat": 2, "pitch": 52, "velocity": 0.5, "duration": 0.5},
+              {"beat": 3, "pitch": 55, "velocity": 0.5, "duration": 0.5}
             ]
           }
         },
         {
           "name": "drums",
           "active": true,
-          "params": {
-            "gain": 0.7999999931550191,
-            "pan": 0
-          },
+          "params": {"gain": 0.799999993, "pan": 0},
           "processors": [],
-          "sends": [
-            {
-              "destName": "master",
-              "gain": 1
-            }
-          ],
+          "sends": [{"destName": "master", "gain": 1}],
           "synth": {
             "type": "sampler",
             "options": {},
             "params": {},
             "events": [
-              {
-                "beat": 0,
-                "pitch": 0,
-                "velocity": 0.9,
-                "duration": 0.2
-              },
-              {
-                "beat": 0.5,
-                "pitch": 4,
-                "velocity": 0.4,
-                "duration": 0.2
-              },
-              {
-                "beat": 1,
-                "pitch": 2,
-                "velocity": 0.8,
-                "duration": 0.2
-              },
-              {
-                "beat": 1.5,
-                "pitch": 4,
-                "velocity": 0.4,
-                "duration": 0.2
-              },
-              {
-                "beat": 2,
-                "pitch": 0,
-                "velocity": 0.9,
-                "duration": 0.2
-              },
-              {
-                "beat": 2.5,
-                "pitch": 4,
-                "velocity": 0.4,
-                "duration": 0.2
-              },
-              {
-                "beat": 3,
-                "pitch": 2,
-                "velocity": 0.8,
-                "duration": 0.2
-              },
-              {
-                "beat": 3.5,
-                "pitch": 4,
-                "velocity": 0.4,
-                "duration": 0.2
-              }
+              {"beat": 0, "pitch": 0, "velocity": 0.9, "duration": 0.2},
+              {"beat": 0.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
+              {"beat": 1, "pitch": 2, "velocity": 0.8, "duration": 0.2},
+              {"beat": 1.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
+              {"beat": 2, "pitch": 0, "velocity": 0.9, "duration": 0.2},
+              {"beat": 2.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
+              {"beat": 3, "pitch": 2, "velocity": 0.8, "duration": 0.2},
+              {"beat": 3.5, "pitch": 4, "velocity": 0.4, "duration": 0.2}
             ]
           }
         }
@@ -404,200 +147,70 @@
         {
           "type": "lfo",
           "name": "wobble",
-          "options": {
-            "waveform": "sine"
-          },
-          "params": {
-            "freq": 0.25
-          }
+          "options": {"waveform": "sine"},
+          "params": {"freq": 0.25}
         }
       ],
-      "patches": [
-        {
-          "sourceName": "wobble",
-          "destName": "reverb.wet",
-          "depth": 0.15000000596046448
-        }
-      ]
+      "patches": [{"sourceName": "wobble", "destName": "reverb.wet", "depth": 0.150000006}]
     },
     "quiet": {
-      "clock": {
-        "bpm": 120,
-        "loopLengthBeats": 4
-      },
-      "harmony": {
-        "root": 60,
-        "scale": [
-          0,
-          1,
-          2,
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10,
-          11
-        ]
-      },
-      "master": {
-        "params": {
-          "gain": 1,
-          "pan": 0
-        },
-        "processors": []
-      },
+      "clock": {"bpm": 120, "loopLengthBeats": 4},
+      "harmony": {"root": 60, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
+      "master": {"params": {"gain": 1, "pan": 0}, "processors": []},
       "buses": [
         {
           "name": "fx",
-          "params": {
-            "gain": 1,
-            "pan": 0
-          },
+          "params": {"gain": 1, "pan": 0},
           "processors": [
             {
               "type": "reverb",
               "name": "reverb",
               "active": true,
-              "options": {
-                "duration": 2.5,
-                "decay": 3
-              },
-              "params": {
-                "wet": 0.6000000238418579
-              }
+              "options": {"duration": 2.5, "decay": 3},
+              "params": {"wet": 0.600000024}
             }
           ],
-          "sends": [
-            {
-              "destName": "master",
-              "gain": 1
-            }
-          ]
+          "sends": [{"destName": "master", "gain": 1}]
         }
       ],
       "tracks": [
         {
           "name": "lead",
           "active": true,
-          "params": {
-            "gain": 0.4000000006128335,
-            "pan": 0
-          },
+          "params": {"gain": 0.400000001, "pan": 0},
           "processors": [],
-          "sends": [
-            {
-              "destName": "master",
-              "gain": 1
-            },
-            {
-              "destName": "fx",
-              "gain": 0.30000001192092896
-            }
-          ],
+          "sends": [{"destName": "master", "gain": 1}, {"destName": "fx", "gain": 0.300000012}],
           "synth": {
             "type": "oscsynth",
-            "options": {
-              "waveform": "triangle"
-            },
+            "options": {"waveform": "triangle"},
             "params": {},
             "events": [
-              {
-                "beat": 0,
-                "pitch": 48,
-                "velocity": 0.5,
-                "duration": 0.5
-              },
-              {
-                "beat": 1,
-                "pitch": 50,
-                "velocity": 0.5,
-                "duration": 0.5
-              },
-              {
-                "beat": 2,
-                "pitch": 52,
-                "velocity": 0.5,
-                "duration": 0.5
-              },
-              {
-                "beat": 3,
-                "pitch": 55,
-                "velocity": 0.5,
-                "duration": 0.5
-              }
+              {"beat": 0, "pitch": 48, "velocity": 0.5, "duration": 0.5},
+              {"beat": 1, "pitch": 50, "velocity": 0.5, "duration": 0.5},
+              {"beat": 2, "pitch": 52, "velocity": 0.5, "duration": 0.5},
+              {"beat": 3, "pitch": 55, "velocity": 0.5, "duration": 0.5}
             ]
           }
         },
         {
           "name": "drums",
           "active": true,
-          "params": {
-            "gain": 0.24999999805274295,
-            "pan": 0
-          },
+          "params": {"gain": 0.249999998, "pan": 0},
           "processors": [],
-          "sends": [
-            {
-              "destName": "master",
-              "gain": 1
-            }
-          ],
+          "sends": [{"destName": "master", "gain": 1}],
           "synth": {
             "type": "sampler",
             "options": {},
             "params": {},
             "events": [
-              {
-                "beat": 0,
-                "pitch": 0,
-                "velocity": 0.9,
-                "duration": 0.2
-              },
-              {
-                "beat": 0.5,
-                "pitch": 4,
-                "velocity": 0.4,
-                "duration": 0.2
-              },
-              {
-                "beat": 1,
-                "pitch": 2,
-                "velocity": 0.8,
-                "duration": 0.2
-              },
-              {
-                "beat": 1.5,
-                "pitch": 4,
-                "velocity": 0.4,
-                "duration": 0.2
-              },
-              {
-                "beat": 2,
-                "pitch": 0,
-                "velocity": 0.9,
-                "duration": 0.2
-              },
-              {
-                "beat": 2.5,
-                "pitch": 4,
-                "velocity": 0.4,
-                "duration": 0.2
-              },
-              {
-                "beat": 3,
-                "pitch": 2,
-                "velocity": 0.8,
-                "duration": 0.2
-              },
-              {
-                "beat": 3.5,
-                "pitch": 4,
-                "velocity": 0.4,
-                "duration": 0.2
-              }
+              {"beat": 0, "pitch": 0, "velocity": 0.9, "duration": 0.2},
+              {"beat": 0.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
+              {"beat": 1, "pitch": 2, "velocity": 0.8, "duration": 0.2},
+              {"beat": 1.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
+              {"beat": 2, "pitch": 0, "velocity": 0.9, "duration": 0.2},
+              {"beat": 2.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
+              {"beat": 3, "pitch": 2, "velocity": 0.8, "duration": 0.2},
+              {"beat": 3.5, "pitch": 4, "velocity": 0.4, "duration": 0.2}
             ]
           }
         }
@@ -606,21 +219,11 @@
         {
           "type": "lfo",
           "name": "wobble",
-          "options": {
-            "waveform": "sine"
-          },
-          "params": {
-            "freq": 0.25
-          }
+          "options": {"waveform": "sine"},
+          "params": {"freq": 0.25}
         }
       ],
-      "patches": [
-        {
-          "sourceName": "wobble",
-          "destName": "reverb.wet",
-          "depth": 0.15000000596046448
-        }
-      ]
+      "patches": [{"sourceName": "wobble", "destName": "reverb.wet", "depth": 0.150000006}]
     }
   }
 }

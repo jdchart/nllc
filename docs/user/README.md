@@ -28,7 +28,7 @@ audio-options panel.
   contains), and the **audio options** panel (see below).
 - **`/code-editor`** — a **blank session**: nothing but the master channel.
 - **`/code-editor/<name>`** — the same page, auto-loading
-  `static/sessions/<name>.json` on open. Four ship:
+  `static/sessions/<name>.json` on open. Six ship:
   - **`demo`** — a couple of tracks, a reverb bus, an LFO patch.
   - **`percs-demo`** — a four-track drum kit (kick, snare, hats, percs each on
     their own track) driven by one `markovpercs` rhythm, through reverb and
@@ -38,6 +38,11 @@ audio-options panel.
   - **`euclid-ghosts`** — a euclidean backbone with a Markov chain adding
     quiet off-beat ghost notes around it; the worked example of two
     generators driving one kit.
+  - **`pattern-drums`** — hand-written drum patterns from
+    `static/patterns/hiphopdrums/`, varied live: two `patternvariator`s over
+    one split kit, one of them a 6-step hat lane phasing against the bar.
+  - **`pattern-chords`** — hand-written chords and a melody on two `karplus`
+    (plucked string) tracks, with an LFO breathing the string brightness.
 
   Each prints a short readme in the console when it opens, saying what it is
   and which commands are worth trying. Any other `.json` you put in
@@ -110,3 +115,33 @@ into one of those four folders and it's immediately in the pool** — no config,
 no restart while the dev server is running. Loose files at the top level of
 `static/samples/` aren't picked up by the manifest, but are still loadable by
 name (that's where `sampler`'s built-in defaults live).
+
+### Patterns
+
+The engine's `patternvariator` modulator plays **hand-written** musical
+material — drum rhythms, chord progressions, melodies — from JSON files this
+app serves out of `static/patterns/`. Each subfolder is a **pack**:
+
+```
+static/patterns/
+├── hiphopdrums/   boom-bap, dusty, halftime, laid-back, polymeter, broken
+├── darkchords/    minor-drift, seventh-fall, pedal-shift, nocturne, ...
+└── melodies/      pentatonic-cell, descending, arp-cell, call-response
+```
+
+Same arrangement as samples, and for the same reason: a browser can't list a
+directory, so the app serves `/patterns/manifest.json` describing what's there.
+Practically, **drop a `.json` into a folder (or make a new folder) and refresh**
+— no config, no code change, no restart while the dev server is running.
+
+These files are meant to be edited. A drum pattern is a character grid:
+
+```json
+{ "kind": "drums", "step_beats": 0.25,
+  "lanes": { "kicks":  "x... ..x. ..x. ....",
+             "snares": ".... x... .... x...",
+             "hats":   "x.x." } }
+```
+
+Full format reference, including chords and melodies:
+[ribbit/docs/user/patterns.md](../../../ribbit/docs/user/patterns.md).

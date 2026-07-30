@@ -6,8 +6,10 @@ the object model, the full slash-command vocabulary, and how to extend it — is
 documented in the [ribbit docs](../../ribbit/docs/).
 
 - **[docs/user](user/)** — for people using the app: the console + mixer page,
-  the demo sessions, saving/loading, and audio options. For the commands you
-  type into the console, see the [ribbit command reference](../../ribbit/docs/user/).
+  the demo sessions, saving/loading, audio options, and where sample and
+  pattern files live. For the commands you type into the console, see the
+  [ribbit command reference](../../ribbit/docs/user/); for the hand-editable
+  pattern format, [ribbit/docs/user/patterns.md](../../ribbit/docs/user/patterns.md).
 - **[docs/dev](dev/)** — for people modifying the app: the SvelteKit structure,
   how it wires to `ribbit` (the single integration point), and the mixer/console
   components.

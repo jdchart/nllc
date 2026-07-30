@@ -56,7 +56,9 @@ is and which commands to try — so the quickest way in is to open one and read
 what it tells you. `percs-demo` is a four-track drum kit driven by a generated
 rhythm through reverb and delay buses; `euclid-demo` is the same idea built on
 a euclidean grid instead; `euclid-ghosts` runs both generators at once, a fixed
-backbone with quiet off-beat ghost notes around it.
+backbone with quiet off-beat ghost notes around it. `pattern-drums` and
+`pattern-chords` play *hand-written* material instead of generated —
+respectively a varied hip-hop kit and chords/melody on plucked strings.
 See the [ribbit tutorial](../ribbit/docs/user/tutorial.md) for a walkthrough of
 your first commands.
 
@@ -68,6 +70,28 @@ from those at random, so the app also serves `/samples/manifest.json` (a
 server route that reads the folder — a browser can't list a directory over
 HTTP). Adding a `.wav` to one of those folders is the whole workflow: no code
 change, and no restart under `vite dev`.
+
+### Patterns
+
+`static/patterns/` is served at `/patterns/`, and holds **hand-written**
+musical material — drum rhythms, chord progressions, melodies — that the
+engine's `patternvariator` plays and varies. Each subfolder is a pack
+(`hiphopdrums/`, `darkchords/`, `melodies/` ship), and the app serves
+`/patterns/manifest.json` the same way it does for samples and for the same
+reason.
+
+These are meant to be edited. A drum pattern is a character grid, where `x` is
+a hit, `.` a rest, and spaces are ignored so you can see the bar:
+
+```json
+{ "kind": "drums", "step_beats": 0.25,
+  "lanes": { "kicks":  "x... ..x. ..x. ....",
+             "snares": ".... x... .... x...",
+             "hats":   "x.x." } }
+```
+
+Adding a `.json` (or a whole new pack folder) is the whole workflow. Full
+format reference: [ribbit/docs/user/patterns.md](../ribbit/docs/user/patterns.md).
 
 ## Building
 

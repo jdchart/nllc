@@ -78,6 +78,16 @@ derived data) as props and call its methods.
   `/samples/` alongside the files it describes, which only resolves as long as
   no literal `static/samples/manifest.json` exists to shadow it — static files
   win over routes.
+- `patterns/manifest.json/+server.js` — the same endpoint shape for
+  `static/patterns/`, serving the engine's `patternvariator`: `{ <pack>:
+  ["<pack>/<name>.json", ...] }`, each entry relative to `/patterns/`. Kept
+  deliberately identical in shape to the samples route so a host author learns
+  one rule, not two, with **one structural difference**: sample categories are
+  fixed (they map onto `percsampler`'s four hardcoded slot groups, and a fifth
+  would be meaningless), whereas *every subdirectory is a pack* — a pack is
+  just a folder of related patterns. A pack containing no `.json` is omitted
+  entirely rather than offered as an empty choice, so `pack=random` can never
+  land somewhere with nothing to play. Same shadowing caveat as above.
 
 ## Components
 
@@ -133,13 +143,30 @@ level are ignored by the manifest but still fetchable by name (that's where
 `sampler`'s defaults live). Adding or removing a `.wav` needs no code change
 and no rebuild under `vite dev`.
 
+`static/patterns/` holds hand-written pattern files, enumerated by the patterns
+manifest route above. Each subfolder is a pack; three ship — `hiphopdrums/`
+(drum lanes), `darkchords/` and `melodies/` (scale degrees). Unlike samples,
+these are *content the user is expected to edit*: the format is designed for
+hand-editing (see
+[ribbit/docs/user/patterns.md](../../../ribbit/docs/user/patterns.md)), and
+adding a folder or a file needs no code change and no rebuild under `vite dev`.
+Note a pack outlives any particular modulator — removing `patternvariator`
+wouldn't make the packs meaningless, which is why they're content rather than
+type-owned assets.
+
 `static/sessions/` holds session JSON files: each one is both a
 `/code-editor/<name>` route and an entry in the homepage dropdown, purely by
-being in that folder. Four ship: `demo.json`, `percs-demo.json` (four
+being in that folder. Six ship: `demo.json`, `percs-demo.json` (four
 category-restricted `percsampler` tracks fed by one `markovpercs`, through
 reverb and delay buses), `euclid-demo.json` (the euclidean grid generator),
-and `euclid-ghosts.json` (a euclidean backbone plus a Markov ghost layer on
-the same tracks).
+`euclid-ghosts.json` (a euclidean backbone plus a Markov ghost layer on
+the same tracks), `pattern-drums.json` (two `patternvariator`s reading
+`hiphopdrums/` over one split kit) and `pattern-chords.json` (chords and a
+melody on two `karplus` tracks).
+
+The files are stored **width-budget compacted** — short objects and arrays
+inlined, `readme` one line per element. Nothing reads the formatting, but they
+are legible enough to hand-edit, which one value per line was not.
 
 Each carries a top-level **`readme`** — an array of lines the engine prints to
 the console on load (see `ribbit`'s `session.js`). It's the right place for

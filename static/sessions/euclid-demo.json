@@ -1,11 +1,11 @@
 {
   "version": 1,
   "readme": [
-    "euclid-demo \u2014 a euclidean drum grid: repeatable structure, four independent layers.",
+    "euclid-demo — a euclidean drum grid: repeatable structure, four independent layers.",
     "",
     "The 'grid' generator (euclidpercs) places each category with Bjorklund's",
     "algorithm, so every hit is decided by its own step index. That means the kick",
-    "really does land on all four downbeats, every pass \u2014 the thing a Markov chain",
+    "really does land on all four downbeats, every pass — the thing a Markov chain",
     "structurally cannot do.",
     "",
     "  kicks  X...X...X...X...   snares ....X.......X...",
@@ -25,225 +25,93 @@
     "",
     "preset= resets every pulse and rotation; individual settings win afterwards."
   ],
-  "clock": {
-    "bpm": 124,
-    "loopLengthBeats": 4
-  },
-  "harmony": {
-    "root": 60,
-    "scale": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11
-    ]
-  },
-  "master": {
-    "params": {
-      "gain": 0.9,
-      "pan": 0
-    },
-    "processors": []
-  },
+  "clock": {"bpm": 124, "loopLengthBeats": 4},
+  "harmony": {"root": 60, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
+  "master": {"params": {"gain": 0.9, "pan": 0}, "processors": []},
   "buses": [
     {
       "name": "verb",
-      "params": {
-        "gain": 0.8,
-        "pan": 0
-      },
+      "params": {"gain": 0.8, "pan": 0},
       "processors": [
         {
           "type": "reverb",
           "name": "room",
           "active": true,
-          "options": {
-            "duration": 1.4,
-            "decay": 4
-          },
-          "params": {
-            "wet": 1
-          }
+          "options": {"duration": 1.4, "decay": 4},
+          "params": {"wet": 1}
         }
       ],
-      "sends": [
-        {
-          "destName": "master",
-          "gain": 1
-        }
-      ]
+      "sends": [{"destName": "master", "gain": 1}]
     },
     {
       "name": "echo",
-      "params": {
-        "gain": 0.7,
-        "pan": 0
-      },
+      "params": {"gain": 0.7, "pan": 0},
       "processors": [
         {
           "type": "delay",
           "name": "slap",
           "active": true,
-          "options": {
-            "stereoOffset": 0.021
-          },
-          "params": {
-            "time": 0.3629,
-            "feedback": 0.32,
-            "wet": 1
-          }
+          "options": {"stereoOffset": 0.021},
+          "params": {"time": 0.3629, "feedback": 0.32, "wet": 1}
         }
       ],
-      "sends": [
-        {
-          "destName": "master",
-          "gain": 1
-        }
-      ]
+      "sends": [{"destName": "master", "gain": 1}]
     }
   ],
   "tracks": [
     {
       "name": "kick",
       "active": true,
-      "params": {
-        "gain": 0.9,
-        "pan": 0
-      },
+      "params": {"gain": 0.9, "pan": 0},
       "processors": [],
-      "sends": [
-        {
-          "destName": "master",
-          "gain": 1
-        }
-      ],
+      "sends": [{"destName": "master", "gain": 1}],
       "synth": {
         "type": "percsampler",
-        "options": {
-          "per_category": 3,
-          "categories": [
-            "kicks"
-          ]
-        },
-        "params": {
-          "dynamics": 0.1,
-          "pan_spread": 0,
-          "speed_spread": 0
-        },
+        "options": {"per_category": 3, "categories": ["kicks"]},
+        "params": {"dynamics": 0.1, "pan_spread": 0, "speed_spread": 0},
         "events": []
       }
     },
     {
       "name": "snare",
       "active": true,
-      "params": {
-        "gain": 0.7,
-        "pan": 0
-      },
+      "params": {"gain": 0.7, "pan": 0},
       "processors": [],
-      "sends": [
-        {
-          "destName": "master",
-          "gain": 1
-        },
-        {
-          "destName": "verb",
-          "gain": 0.3
-        }
-      ],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "verb", "gain": 0.3}],
       "synth": {
         "type": "percsampler",
-        "options": {
-          "per_category": 3,
-          "categories": [
-            "snares"
-          ]
-        },
-        "params": {
-          "dynamics": 0.25,
-          "pan_spread": 0,
-          "speed_spread": 0.06
-        },
+        "options": {"per_category": 3, "categories": ["snares"]},
+        "params": {"dynamics": 0.25, "pan_spread": 0, "speed_spread": 0.06},
         "events": []
       }
     },
     {
       "name": "hats",
       "active": true,
-      "params": {
-        "gain": 0.5,
-        "pan": 0
-      },
+      "params": {"gain": 0.5, "pan": 0},
       "processors": [],
-      "sends": [
-        {
-          "destName": "master",
-          "gain": 1
-        },
-        {
-          "destName": "echo",
-          "gain": 0.2
-        }
-      ],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "echo", "gain": 0.2}],
       "synth": {
         "type": "percsampler",
-        "options": {
-          "per_category": 3,
-          "categories": [
-            "hats"
-          ]
-        },
-        "params": {
-          "dynamics": 0.4,
-          "pan_spread": 0.45,
-          "speed_spread": 0.15
-        },
+        "options": {"per_category": 3, "categories": ["hats"]},
+        "params": {"dynamics": 0.4, "pan_spread": 0.45, "speed_spread": 0.15},
         "events": []
       }
     },
     {
       "name": "percs",
       "active": true,
-      "params": {
-        "gain": 0.55,
-        "pan": 0
-      },
+      "params": {"gain": 0.55, "pan": 0},
       "processors": [],
       "sends": [
-        {
-          "destName": "master",
-          "gain": 1
-        },
-        {
-          "destName": "echo",
-          "gain": 0.35
-        },
-        {
-          "destName": "verb",
-          "gain": 0.2
-        }
+        {"destName": "master", "gain": 1},
+        {"destName": "echo", "gain": 0.35},
+        {"destName": "verb", "gain": 0.2}
       ],
       "synth": {
         "type": "percsampler",
-        "options": {
-          "per_category": 3,
-          "categories": [
-            "percs"
-          ]
-        },
-        "params": {
-          "dynamics": 0.45,
-          "pan_spread": 0.8,
-          "speed_spread": 0.2
-        },
+        "options": {"per_category": 3, "categories": ["percs"]},
+        "params": {"dynamics": 0.45, "pan_spread": 0.8, "speed_spread": 0.2},
         "events": []
       }
     }
@@ -268,54 +136,22 @@
         "percs": 5,
         "percs_rotate": 2
       },
-      "params": {
-        "velocity": 0.95,
-        "swing": 0.08,
-        "dropout": 0.12
-      }
+      "params": {"velocity": 0.95, "swing": 0.08, "dropout": 0.12}
     },
     {
       "type": "lfo",
       "name": "breathe",
-      "options": {
-        "waveform": "sine"
-      },
-      "params": {
-        "freq": 0.045
-      }
+      "options": {"waveform": "sine"},
+      "params": {"freq": 0.045}
     }
   ],
   "patches": [
-    {
-      "sourceName": "grid",
-      "destName": "kick.notes",
-      "depth": 0
-    },
-    {
-      "sourceName": "grid",
-      "destName": "snare.notes",
-      "depth": 0
-    },
-    {
-      "sourceName": "grid",
-      "destName": "hats.notes",
-      "depth": 0
-    },
-    {
-      "sourceName": "grid",
-      "destName": "percs.notes",
-      "depth": 0
-    },
-    {
-      "sourceName": "breathe",
-      "destName": "grid.dropout",
-      "depth": 0.12
-    },
-    {
-      "sourceName": "breathe",
-      "destName": "hats.pan_spread",
-      "depth": 0.35
-    }
+    {"sourceName": "grid", "destName": "kick.notes", "depth": 0},
+    {"sourceName": "grid", "destName": "snare.notes", "depth": 0},
+    {"sourceName": "grid", "destName": "hats.notes", "depth": 0},
+    {"sourceName": "grid", "destName": "percs.notes", "depth": 0},
+    {"sourceName": "breathe", "destName": "grid.dropout", "depth": 0.12},
+    {"sourceName": "breathe", "destName": "hats.pan_spread", "depth": 0.35}
   ],
   "states": {}
 }

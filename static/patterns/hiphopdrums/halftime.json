@@ -1,0 +1,11 @@
+{
+  "name": "halftime",
+  "kind": "drums",
+  "step_beats": 0.25,
+  "velocity": 0.9,
+  "lanes": {
+    "kicks":  "x... ..x. .... x...",
+    "snares": ".... .... X... ....",
+    "hats":   "X.x. X.x. X.x. X.x."
+  }
+}
