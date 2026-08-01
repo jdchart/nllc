@@ -1,0 +1,11 @@
+{
+  "name": "drone fifths",
+  "kind": "notes",
+  "step_beats": 4,
+  "duration": 7,
+  "velocity": 0.5,
+  "sequence": [
+    "0,7,12,19", ".",
+    "-5,2,7,14", "."
+  ]
+}

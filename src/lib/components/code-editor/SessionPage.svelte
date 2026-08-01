@@ -96,6 +96,14 @@
         nllc_instance = nllc;
         ({ executeCommand, suggest } = createCommandRouter(nllc));
 
+        // Dev-only debug handle. The console's text output is the whole
+        // verification surface for engine work (see .claude/skills/run), and
+        // some engine state has no text form at all — a param's *modulated*
+        // value, a node's connections. This is how a smoke test reaches it
+        // without inventing a console command whose only user is the test.
+        // Guarded by import.meta.env.DEV, so it never ships in a build.
+        if (import.meta.env.DEV) window.nllc = nllc;
+
         if (sessionUrl) {
             // A URL segment that doesn't match a real file is now reachable by
             // hand (/code-editor/anything), and a 404 returns HTML that fails

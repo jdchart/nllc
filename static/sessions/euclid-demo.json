@@ -23,11 +23,37 @@
     "  /grid dropout=0.5 8b           ramp the pattern open over 8 beats",
     "  /grid variation=1              spread hits across each category's samples",
     "",
-    "preset= resets every pulse and rotation; individual settings win afterwards."
+    "preset= resets every pulse and rotation; individual settings win afterwards.",
+    "",
+    "master runs a goodenizer called 'glue' \u2014 compressor, saturator, tilt EQ",
+    "and limiter in one box. /glue shows how hard it's working, /glue mix=0",
+    "takes it off. The goodenizer-demo session tours it in full."
   ],
   "clock": {"bpm": 124, "loopLengthBeats": 4},
   "harmony": {"root": 60, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
-  "master": {"params": {"gain": 0.9, "pan": 0}, "processors": []},
+  "master": {
+    "params": {"gain": 0.9, "pan": 0},
+    "processors": [
+      {
+        "type": "goodenizer",
+        "name": "glue",
+        "active": true,
+        "options": {"character": "soft", "oversample": "2x"},
+        "params": {
+          "threshold": -22,
+          "ratio": 4,
+          "attack": 0.006,
+          "release": 0.1,
+          "makeup": 1.5,
+          "drive": 1,
+          "tone": 0.15,
+          "pivot": 900,
+          "ceiling": -1,
+          "mix": 1
+        }
+      }
+    ]
+  },
   "buses": [
     {
       "name": "verb",

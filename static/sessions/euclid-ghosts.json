@@ -25,11 +25,37 @@
     "  /grid dropout=0.4 8b       thin the skeleton and let the ghosts show through",
     "  /grid preset=fourfloor at=cycle    swap the backbone on the next bar",
     "",
-    "Mute either one to hear what it was doing: /snare stop at=cycle, or unpatch."
+    "Mute either one to hear what it was doing: /snare stop at=cycle, or unpatch.",
+    "",
+    "master runs a goodenizer called 'glue' \u2014 compressor, saturator, tilt EQ",
+    "and limiter in one box. /glue shows how hard it's working, /glue mix=0",
+    "takes it off. The goodenizer-demo session tours it in full."
   ],
   "clock": {"bpm": 92, "loopLengthBeats": 4},
   "harmony": {"root": 60, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
-  "master": {"params": {"gain": 0.9, "pan": 0}, "processors": []},
+  "master": {
+    "params": {"gain": 0.9, "pan": 0},
+    "processors": [
+      {
+        "type": "goodenizer",
+        "name": "glue",
+        "active": true,
+        "options": {"character": "tape", "oversample": "2x"},
+        "params": {
+          "threshold": -24,
+          "ratio": 4,
+          "attack": 0.008,
+          "release": 0.18,
+          "makeup": 1.5,
+          "drive": 1,
+          "tone": 0.1,
+          "pivot": 850,
+          "ceiling": -1,
+          "mix": 1
+        }
+      }
+    ]
+  },
   "buses": [
     {
       "name": "verb",

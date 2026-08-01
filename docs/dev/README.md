@@ -26,7 +26,12 @@ Everything that touches the engine lives in **one** file:
    `AudioContext` doesn't exist during SSR), passing the saved `latencyHint` and
    applying the saved output device.
 2. Builds the command router: `const { executeCommand, suggest } =
-   createCommandRouter(engine)`, and hands those to the console.
+   createCommandRouter(engine)`, and hands those to the console. Also assigns
+   `window.nllc = engine` under `import.meta.env.DEV` — a debug handle that
+   never ships in a build. Some engine state has no text form the console
+   could print (a param's *modulated* value, a node's connections), and this
+   is how a smoke test reaches it without inventing a console command whose
+   only user is the test. See `.claude/skills/run`'s `js:` directive.
 3. When given a `sessionUrl`, `fetch`es that JSON and calls
    `loadSession(engine, json)` — reporting a failed fetch/parse in a banner
    rather than silently leaving an empty session.
@@ -66,28 +71,34 @@ derived data) as props and call its methods.
   HTTP, so this has to be a *server* load; it also parses each file to build the
   one-line summary shown under the dropdown.
 - `samples/manifest.json/+server.js` — a `GET` endpoint returning what's in
-  `static/samples/`, grouped by the four categories the engine's `percsampler`
-  knows (`kicks`, `snares`, `hats`, `percs`), each entry a path relative to
+  `static/samples/`, one key per folder, each entry a path relative to
   `/samples/`. Same directory-listing constraint as the session dropdown above,
   and the app's side of a contract the engine defines: `percsampler` fills its
-  kit at random and so has to be told what the candidates are. Serving audio
-  files under `/samples/` was already the host's job; this is the same job
-  extended. A missing category folder is reported as an empty array rather
-  than failing the request, since the engine copes with an empty category but
-  not with a broken response. Note the route deliberately sits *under*
-  `/samples/` alongside the files it describes, which only resolves as long as
-  no literal `static/samples/manifest.json` exists to shadow it — static files
-  win over routes.
+  kit at random and `granular` picks one source recording at random, so both
+  have to be told what the candidates are. Serving audio files under
+  `/samples/` was already the host's job; this is the same job extended.
+
+  The four drum categories (`kicks`, `snares`, `hats`, `percs`) are listed
+  first and **always present, empty if missing** — `percsampler`'s slot
+  arithmetic depends on them existing. Every *other* directory is published
+  too, as an ordinary folder nothing special is promised about, and omitted if
+  it holds no audio: that's what makes `static/samples/foley/` visible to
+  `granular`, and adding a folder the whole workflow for a new source library.
+  A missing or unreadable folder is reported as empty rather than failing the
+  request, since the engine copes with an empty folder but not with a broken
+  response. Note the route deliberately sits *under* `/samples/` alongside the
+  files it describes, which only resolves as long as no literal
+  `static/samples/manifest.json` exists to shadow it — static files win over
+  routes.
 - `patterns/manifest.json/+server.js` — the same endpoint shape for
   `static/patterns/`, serving the engine's `patternvariator`: `{ <pack>:
   ["<pack>/<name>.json", ...] }`, each entry relative to `/patterns/`. Kept
   deliberately identical in shape to the samples route so a host author learns
-  one rule, not two, with **one structural difference**: sample categories are
-  fixed (they map onto `percsampler`'s four hardcoded slot groups, and a fifth
-  would be meaningless), whereas *every subdirectory is a pack* — a pack is
-  just a folder of related patterns. A pack containing no `.json` is omitted
-  entirely rather than offered as an empty choice, so `pack=random` can never
-  land somewhere with nothing to play. Same shadowing caveat as above.
+  one rule, not two. The remaining difference is only that *nothing* is fixed
+  here — every subdirectory is a pack, whereas the samples route guarantees
+  the four drum categories. A pack containing no `.json` is omitted entirely
+  rather than offered as an empty choice, so `pack=random` can never land
+  somewhere with nothing to play. Same shadowing caveat as above.
 
 ## Components
 
@@ -135,17 +146,23 @@ wired to anything.
 
 ## Static assets
 
-`static/samples/` holds the drum samples the engine's `sampler` and
-`percsampler` fetch from `/samples/…`. Its four subfolders — `kicks/`,
-`snares/`, `hats/`, `percs/` — are the categories `percsampler` builds a kit
-from, and are enumerated by the manifest route above; loose files at the top
-level are ignored by the manifest but still fetchable by name (that's where
-`sampler`'s defaults live). Adding or removing a `.wav` needs no code change
-and no rebuild under `vite dev`.
+`static/samples/` holds the audio the engine's `sampler`, `percsampler` and
+`granular` fetch from `/samples/…`, enumerated by the manifest route above.
+Four subfolders — `kicks/`, `snares/`, `hats/`, `percs/` — are the categories
+`percsampler` builds a kit from; `foley/` holds unedited field recordings for
+`granular`, and any further folder added would work the same way. Loose files
+at the top level are ignored by the manifest but still fetchable by name
+(that's where `sampler`'s defaults live). Adding or removing a `.wav` needs no
+code change and no rebuild under `vite dev`.
+
+Two properties of `foley/` that drum samples don't have, and that the engine
+handles rather than the app: the files are **long** (up to four minutes, held
+whole in memory once decoded, doubled if `granular` plays them in reverse) and
+**unnormalized** (spanning ~30dB, so `granular` peak-matches each on load).
 
 `static/patterns/` holds hand-written pattern files, enumerated by the patterns
-manifest route above. Each subfolder is a pack; three ship — `hiphopdrums/`
-(drum lanes), `darkchords/` and `melodies/` (scale degrees). Unlike samples,
+manifest route above. Each subfolder is a pack; four ship — `hiphopdrums/`
+(drum lanes), `darkchords/`, `ambientchords/` and `melodies/` (scale degrees). Unlike samples,
 these are *content the user is expected to edit*: the format is designed for
 hand-editing (see
 [ribbit/docs/user/patterns.md](../../../ribbit/docs/user/patterns.md)), and
@@ -156,13 +173,21 @@ type-owned assets.
 
 `static/sessions/` holds session JSON files: each one is both a
 `/code-editor/<name>` route and an entry in the homepage dropdown, purely by
-being in that folder. Six ship: `demo.json`, `percs-demo.json` (four
+being in that folder. Nine ship: `demo.json`, `percs-demo.json` (four
 category-restricted `percsampler` tracks fed by one `markovpercs`, through
 reverb and delay buses), `euclid-demo.json` (the euclidean grid generator),
 `euclid-ghosts.json` (a euclidean backbone plus a Markov ghost layer on
 the same tracks), `pattern-drums.json` (two `patternvariator`s reading
-`hiphopdrums/` over one split kit) and `pattern-chords.json` (chords and a
-melody on two `karplus` tracks).
+`hiphopdrums/` over one split kit), `pattern-chords.json` (chords and a
+melody on two `karplus` tracks), `goodenizer-demo.json` (the dynamics and
+tone processors: parallel compression on a bus, saturation and tilt on a
+track, a `goodenizer` on master, and an LFO patched into its threshold),
+`granular-pad.json` (three `granular` tracks over the `ambientchords` pack,
+making chords out of `foley/` field recordings) and `ambient-tape.json`
+(three `tapepad` layers over the same pack, plus a `hiphopdrums` beat).
+
+All nine carry a `goodenizer` insert named `glue` on master, tuned per
+session in the file's `master.processors`.
 
 The files are stored **width-budget compacted** — short objects and arrays
 inlined, `readme` one line per element. Nothing reads the formatting, but they

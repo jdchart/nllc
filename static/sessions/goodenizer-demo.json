@@ -1,0 +1,254 @@
+{
+  "version": 1,
+  "readme": [
+    "goodenizer-demo — the dynamics and dirt processors, one of each, wired up.",
+    "",
+    "Five processors ship for making things sound good rather than making them",
+    "sound different. Four do one job each; the fifth is all four in a box:",
+    "",
+    "  compressor   evens out level        (here: 'squash', on the smash bus)",
+    "  saturator    adds harmonics/dirt    (here: 'grit', on keys)",
+    "  tilt         trades lows for highs  (here: 'voice', on keys)",
+    "  limiter      holds a ceiling        (here: 'cap', on the smash bus)",
+    "  goodenizer   all four in order      (here: 'glue', on master)",
+    "",
+    "Everything is stopped-clock repeatable — the euclidean grid plays the same",
+    "bar every pass — so you can A/B any of these and actually hear the change",
+    "rather than a different take.",
+    "",
+    "Start with the master chain:",
+    "  /start",
+    "  /glue                      live gain reduction, both stages",
+    "  /glue mix=0                the session with nothing on it",
+    "  /glue mix=1 2              fade it back in over 2 seconds",
+    "  /glue tone=-0.6 4b         tilt it dark; +0.6 for thin and bright",
+    "  /glue threshold=-45 ratio=18   full squash",
+    "",
+    "It ships with drive=1, which means its saturation stage is present but",
+    "clean. Compression, tilt and limiting make a mix more like itself —",
+    "louder, steadier, better balanced. Saturation makes it into something",
+    "else, so it waits to be asked:",
+    "  /glue drive=9              stop being polite",
+    "  /glue character=fold       a wavefolder. soft | hard | fold | tape",
+    "  /glue drive=1              back to clean",
+    "",
+    "'glue' is a composite: /glue threshold= and /squash threshold= are the",
+    "same control on two different compressors, not two implementations.",
+    "",
+    "Parallel compression — the smash bus is a squashed copy of the drums,",
+    "blended back underneath them rather than replacing them:",
+    "  /smash gain=0             drums, untreated",
+    "  /smash gain=0.9 4b        bring the squashed copy up under them",
+    "  /squash                   watch it reduce 15dB+",
+    "  /squash mix=0.4           or do the blend inside the compressor instead",
+    "  /cap ceiling=-14          the limiter after it, clamping harder",
+    "",
+    "Dirt and tone on the keys, two processors in series on one track:",
+    "  /grit drive=20            tape saturation, pushed",
+    "  /grit character=hard      buzzy odd harmonics, no rounding",
+    "  /grit mix=0.5             parallel distortion",
+    "  /voice tone=0.8 4b        pull the keys forward and thin",
+    "  /voice pivot=2500         move where the see-saw pivots",
+    "",
+    "The pumping compressor. 'sidechain' is an LFO patched into glue.threshold,",
+    "so the threshold itself moves in time and the whole mix breathes with it:",
+    "  /patches                  find its id",
+    "  /patch id=<id> depth=18   from a breath to a full four-to-the-floor pump",
+    "  /sidechain freq=1.8       half-time pumping at this tempo",
+    "",
+    "Any param above ramps (tone=0.8 4b) and defers (drive=9 at=cycle) like",
+    "every other param in the engine — including threshold, which is what makes",
+    "the sidechain patch work at all."
+  ],
+  "clock": {"bpm": 110, "loopLengthBeats": 4},
+  "harmony": {"root": 60, "scale": [0, 2, 3, 5, 7, 8, 10]},
+  "master": {
+    "params": {"gain": 0.85, "pan": 0},
+    "processors": [
+      {
+        "type": "goodenizer",
+        "name": "glue",
+        "active": true,
+        "options": {"character": "soft", "oversample": "2x"},
+        "params": {
+          "threshold": -22,
+          "ratio": 4,
+          "attack": 0.008,
+          "release": 0.12,
+          "makeup": 1.4,
+          "drive": 1,
+          "tone": 0.12,
+          "pivot": 900,
+          "ceiling": -1,
+          "mix": 1
+        }
+      }
+    ]
+  },
+  "buses": [
+    {
+      "name": "smash",
+      "params": {"gain": 0.45, "pan": 0},
+      "processors": [
+        {
+          "type": "compressor",
+          "name": "squash",
+          "active": true,
+          "options": {},
+          "params": {
+            "threshold": -38,
+            "ratio": 12,
+            "attack": 0.002,
+            "release": 0.09,
+            "knee": 2,
+            "makeup": 3.5,
+            "mix": 1
+          }
+        },
+        {
+          "type": "limiter",
+          "name": "cap",
+          "active": true,
+          "options": {},
+          "params": {"boost": 1, "ceiling": -6, "release": 0.08}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    },
+    {
+      "name": "verb",
+      "params": {"gain": 0.7, "pan": 0},
+      "processors": [
+        {
+          "type": "reverb",
+          "name": "room",
+          "active": true,
+          "options": {"duration": 2.2, "decay": 3.5},
+          "params": {"wet": 1}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "kick",
+      "active": true,
+      "params": {"gain": 0.9, "pan": 0},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "smash", "gain": 0.6}],
+      "synth": {
+        "type": "percsampler",
+        "options": {"per_category": 3, "categories": ["kicks"]},
+        "params": {"dynamics": 0.1, "pan_spread": 0, "speed_spread": 0},
+        "events": []
+      }
+    },
+    {
+      "name": "snare",
+      "active": true,
+      "params": {"gain": 0.7, "pan": 0},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "smash", "gain": 0.7}],
+      "synth": {
+        "type": "percsampler",
+        "options": {"per_category": 3, "categories": ["snares"]},
+        "params": {"dynamics": 0.3, "pan_spread": 0, "speed_spread": 0.06},
+        "events": []
+      }
+    },
+    {
+      "name": "hats",
+      "active": true,
+      "params": {"gain": 0.45, "pan": 0},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "smash", "gain": 0.35}],
+      "synth": {
+        "type": "percsampler",
+        "options": {"per_category": 3, "categories": ["hats"]},
+        "params": {"dynamics": 0.4, "pan_spread": 0.4, "speed_spread": 0.15},
+        "events": []
+      }
+    },
+    {
+      "name": "keys",
+      "active": true,
+      "params": {"gain": 0.6, "pan": -0.1},
+      "processors": [
+        {
+          "type": "saturator",
+          "name": "grit",
+          "active": true,
+          "options": {"character": "tape", "oversample": "2x"},
+          "params": {"drive": 3.5, "level": 0.8, "mix": 0.7}
+        },
+        {
+          "type": "tilt",
+          "name": "voice",
+          "active": true,
+          "options": {},
+          "params": {"tone": -0.2, "pivot": 700}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "verb", "gain": 0.4}],
+      "synth": {
+        "type": "karplus",
+        "options": {"excitation": "noise"},
+        "params": {"damping": 0.4, "decay": 2.8, "brightness": 0.55},
+        "events": []
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "euclidpercs",
+      "name": "grid",
+      "options": {
+        "preset": "fourfloor",
+        "steps": 16,
+        "step_beats": 0.25,
+        "variation": 0.5,
+        "seed": 20260730,
+        "per_category": 3,
+        "kicks": 4,
+        "kicks_rotate": 0,
+        "snares": 2,
+        "snares_rotate": 4,
+        "hats": 7,
+        "hats_rotate": 0,
+        "percs": 0,
+        "percs_rotate": 0
+      },
+      "params": {"velocity": 0.95, "swing": 0.06, "dropout": 0}
+    },
+    {
+      "type": "patternvariator",
+      "name": "chords",
+      "options": {
+        "pack": "darkchords",
+        "pattern": "minor-drift",
+        "seed": 20260730,
+        "variation": 0.3,
+        "density": 1,
+        "step_beats": 1,
+        "transpose": 0,
+        "per_category": 3
+      },
+      "params": {"velocity": 0.85, "swing": 0}
+    },
+    {
+      "type": "lfo",
+      "name": "sidechain",
+      "options": {"waveform": "sine"},
+      "params": {"freq": 0.9166666667}
+    }
+  ],
+  "patches": [
+    {"sourceName": "grid", "destName": "kick.notes", "depth": 0},
+    {"sourceName": "grid", "destName": "snare.notes", "depth": 0},
+    {"sourceName": "grid", "destName": "hats.notes", "depth": 0},
+    {"sourceName": "chords", "destName": "keys.notes", "depth": 0},
+    {"sourceName": "sidechain", "destName": "glue.threshold", "depth": 5}
+  ],
+  "states": {}
+}

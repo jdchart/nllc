@@ -1,0 +1,228 @@
+{
+  "version": 1,
+  "readme": [
+    "granular-pad — three clouds of foley, playing chords.",
+    "",
+    "Every voice here is a `granular` track: one field recording, played back",
+    "not as a sample but as dozens of overlapping short grains taken from a",
+    "movable playhead. None of these recordings is pitched or in time; what you",
+    "hear is their timbre, stretched into a pad.",
+    "",
+    "  pad       Tidal Pool           ambientchords/slow-bloom",
+    "  air       Jostedal Forest Rain ambientchords/drone-fifths, grains reversed",
+    "  shimmer   Hlessi Texture 12    ambientchords/halo, tiny grains an octave up",
+    "  verb      a 6-second reverb bus; master runs the usual 'glue'",
+    "",
+    "A note is two stages: an envelope (attack/release) shapes the note, while",
+    "density/grain_size/spray shape the cloud inside it. Both are live params.",
+    "",
+    "Try:",
+    "  /start",
+    "  /pad                        which recording it landed on, and how long it is",
+    "  /pad position=0.9 16b       walk the playhead through the recording",
+    "  /pad spray=3 8b             smear a whole phrase of it into one chord",
+    "  /pad grain_size=0.02 8b     from a wash to a buzz — grains become a pitch",
+    "  /air drift=0.5              let the playhead run while each note is held",
+    "  /shimmer density=8          a pointillist cloud instead of a solid one",
+    "  /pad sample=random          another recording from static/samples/foley",
+    "  /pad root=48                play the same chords twice as fast, an octave up",
+    "  /harmony root=55            move the whole thing to G",
+    "  /bloom pattern=tidal        a different progression from the same pack",
+    "  /bloom variation=0.7        revoice it harder",
+    "",
+    "density is the CPU knob: every grain is three nodes, and a note schedules",
+    "all of them up front. 20-40 is a pad; 200 is a stress test.",
+    "",
+    "The sources are picked at random on a fresh /add_track synth=granular, but",
+    "a saved session stores the file it landed on — so this one sounds the same",
+    "every time you open it. Note the two larger recordings take a moment to",
+    "arrive; a note before then is silent rather than queued."
+  ],
+  "clock": {"bpm": 60, "loopLengthBeats": 16},
+  "harmony": {"root": 60, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
+  "master": {
+    "params": {"gain": 0.9, "pan": 0},
+    "processors": [
+      {
+        "type": "goodenizer",
+        "name": "glue",
+        "active": true,
+        "options": {"character": "soft", "oversample": "2x"},
+        "params": {
+          "threshold": -24,
+          "ratio": 2.5,
+          "attack": 0.05,
+          "release": 0.4,
+          "makeup": 1.4,
+          "drive": 1,
+          "tone": -0.05,
+          "pivot": 900,
+          "ceiling": -1.5,
+          "mix": 1
+        }
+      }
+    ]
+  },
+  "buses": [
+    {
+      "name": "verb",
+      "params": {"gain": 0.85, "pan": 0},
+      "processors": [
+        {
+          "type": "reverb",
+          "name": "hall",
+          "active": true,
+          "options": {"duration": 6, "decay": 3},
+          "params": {"wet": 1}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "pad",
+      "active": true,
+      "params": {"gain": 0.6, "pan": -0.1},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "verb", "gain": 0.5}],
+      "synth": {
+        "type": "granular",
+        "options": {
+          "sample": "foley/Jonathan Kawchuk - Tidal Pool.wav",
+          "folder": "foley",
+          "window": "hann",
+          "direction": "forward",
+          "root": 60
+        },
+        "params": {
+          "density": 18,
+          "grain_size": 0.28,
+          "spray": 0.7,
+          "position": 0.2,
+          "drift": 0.04,
+          "pitch_spread": 0.12,
+          "pan_spread": 0.85,
+          "attack": 1.8,
+          "release": 3.5
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "air",
+      "active": true,
+      "params": {"gain": 0.42, "pan": 0.1},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "verb", "gain": 0.7}],
+      "synth": {
+        "type": "granular",
+        "options": {
+          "sample": "foley/Jonathan Kawchuk - Norway Jostedal Forest Rain 140417_01.WAV",
+          "folder": "foley",
+          "window": "hann",
+          "direction": "reverse",
+          "root": 72
+        },
+        "params": {
+          "density": 12,
+          "grain_size": 0.9,
+          "spray": 2.5,
+          "position": 0.35,
+          "drift": 0,
+          "pitch_spread": 0.06,
+          "pan_spread": 1,
+          "attack": 4,
+          "release": 5
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "shimmer",
+      "active": true,
+      "params": {"gain": 0.3, "pan": 0.2},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "verb", "gain": 0.6}],
+      "synth": {
+        "type": "granular",
+        "options": {
+          "sample": "foley/Hlessi - Texture 12.wav",
+          "folder": "foley",
+          "window": "expo",
+          "direction": "mixed",
+          "root": 84
+        },
+        "params": {
+          "density": 30,
+          "grain_size": 0.05,
+          "spray": 1.4,
+          "position": 0.3,
+          "drift": 0.25,
+          "pitch_spread": 0.5,
+          "pan_spread": 0.95,
+          "attack": 0.6,
+          "release": 2.2
+        },
+        "events": []
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "patternvariator",
+      "name": "bloom",
+      "options": {
+        "pack": "ambientchords",
+        "pattern": "slow-bloom",
+        "seed": 12,
+        "variation": 0.3,
+        "density": 1,
+        "step_beats": 2,
+        "transpose": 0,
+        "per_category": 4
+      },
+      "params": {"velocity": 0.9, "swing": 0}
+    },
+    {
+      "type": "patternvariator",
+      "name": "drone",
+      "options": {
+        "pack": "ambientchords",
+        "pattern": "drone-fifths",
+        "seed": 7311,
+        "variation": 0.15,
+        "density": 1,
+        "step_beats": 4,
+        "transpose": 0,
+        "per_category": 4
+      },
+      "params": {"velocity": 0.85, "swing": 0}
+    },
+    {
+      "type": "patternvariator",
+      "name": "sparkle",
+      "options": {
+        "pack": "ambientchords",
+        "pattern": "halo",
+        "seed": 12,
+        "variation": 0.5,
+        "density": 0.65,
+        "step_beats": 2,
+        "transpose": 0,
+        "per_category": 4
+      },
+      "params": {"velocity": 0.7, "swing": 0}
+    },
+    {"type": "lfo", "name": "tide", "options": {"waveform": "sine"}, "params": {"freq": 0.03}},
+    {"type": "lfo", "name": "swell", "options": {"waveform": "triangle"}, "params": {"freq": 0.019}}
+  ],
+  "patches": [
+    {"sourceName": "bloom", "destName": "pad.notes", "depth": 0},
+    {"sourceName": "drone", "destName": "air.notes", "depth": 0},
+    {"sourceName": "sparkle", "destName": "shimmer.notes", "depth": 0},
+    {"sourceName": "tide", "destName": "hall.wet", "depth": 0.3},
+    {"sourceName": "swell", "destName": "shimmer.gain", "depth": 0.12}
+  ],
+  "states": {}
+}

@@ -59,16 +59,24 @@ a euclidean grid instead; `euclid-ghosts` runs both generators at once, a fixed
 backbone with quiet off-beat ghost notes around it. `pattern-drums` and
 `pattern-chords` play *hand-written* material instead of generated —
 respectively a varied hip-hop kit and chords/melody on plucked strings.
+`goodenizer-demo` tours the dynamics and tone processors: parallel compression,
+saturation, a tilt EQ, a limiter, and the `goodenizer` that combines all four.
+`granular-pad` makes chords out of field recordings — three `granular` tracks,
+each playing a foley sample back as a cloud of overlapping grains.
+Every session runs one of those on master as `glue`, so `/glue mix=0` will A/B
+the processing in any of them.
 See the [ribbit tutorial](../ribbit/docs/user/tutorial.md) for a walkthrough of
 your first commands.
 
 ### Samples
 
 `static/samples/` is served at `/samples/`, with `kicks/`, `snares/`, `hats/`
-and `percs/` subfolders. The engine's `percsampler` builds a kit by picking
-from those at random, so the app also serves `/samples/manifest.json` (a
-server route that reads the folder — a browser can't list a directory over
-HTTP). Adding a `.wav` to one of those folders is the whole workflow: no code
+and `percs/` subfolders plus `foley/` (field recordings — rain, rivers, birds,
+glass). The engine's `percsampler` builds a kit by picking from the four drum
+folders at random, and `granular` picks one recording from `foley/` the same
+way, so the app also serves `/samples/manifest.json` (a server route that reads
+the folder — a browser can't list a directory over HTTP). Adding a `.wav` to
+any of those folders — or adding a folder — is the whole workflow: no code
 change, and no restart under `vite dev`.
 
 ### Patterns
@@ -76,7 +84,7 @@ change, and no restart under `vite dev`.
 `static/patterns/` is served at `/patterns/`, and holds **hand-written**
 musical material — drum rhythms, chord progressions, melodies — that the
 engine's `patternvariator` plays and varies. Each subfolder is a pack
-(`hiphopdrums/`, `darkchords/`, `melodies/` ship), and the app serves
+(`hiphopdrums/`, `darkchords/`, `ambientchords/`, `melodies/` ship), and the app serves
 `/patterns/manifest.json` the same way it does for samples and for the same
 reason.
 

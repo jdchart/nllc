@@ -1,0 +1,11 @@
+{
+  "name": "open ninths",
+  "kind": "notes",
+  "step_beats": 4,
+  "duration": 6,
+  "velocity": 0.45,
+  "sequence": [
+    "0,7,14,21", "-3,4,11,16",
+    "-5,2,9,14", "-7,0,7,12"
+  ]
+}

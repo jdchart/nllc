@@ -28,7 +28,7 @@ audio-options panel.
   contains), and the **audio options** panel (see below).
 - **`/code-editor`** — a **blank session**: nothing but the master channel.
 - **`/code-editor/<name>`** — the same page, auto-loading
-  `static/sessions/<name>.json` on open. Six ship:
+  `static/sessions/<name>.json` on open. Eight ship:
   - **`demo`** — a couple of tracks, a reverb bus, an LFO patch.
   - **`percs-demo`** — a four-track drum kit (kick, snare, hats, percs each on
     their own track) driven by one `markovpercs` rhythm, through reverb and
@@ -42,7 +42,22 @@ audio-options panel.
     `static/patterns/hiphopdrums/`, varied live: two `patternvariator`s over
     one split kit, one of them a 6-step hat lane phasing against the bar.
   - **`pattern-chords`** — hand-written chords and a melody on two `karplus`
-    (plucked string) tracks, with an LFO breathing the string brightness.
+    (plucked string) tracks.
+  - **`granular-pad`** — three `granular` tracks playing chords out of field
+    recordings from `static/samples/foley/`: a watery pad, reversed rain, and
+    a shimmer an octave up, over a six-second reverb. Driven by the
+    `ambientchords` pattern pack.
+  - **`ambient-tape`** — three `tapepad` (warped lofi pad) layers over a
+    dusty beat: chords, a shimmer an octave up and an open-fifths drone, all
+    out of the `ambientchords` pack, with two LFOs showing both kinds of
+    patch into a synth param.
+  - **`goodenizer-demo`** — a guided tour of the five dynamics/tone
+    processors: parallel compression on a bus, saturation and a tilt EQ on a
+    track, a `goodenizer` on master, and an LFO patched into its compressor's
+    threshold for a pumping mix.
+
+  Every session runs a `goodenizer` on master named `glue` — `/glue` reports
+  what it's doing and `/glue mix=0` takes it off.
 
   Each prints a short readme in the console when it opens, saying what it is
   and which commands are worth trying. Any other `.json` you put in
@@ -104,17 +119,28 @@ after.
 
 ### Samples
 
-The engine's `sampler` and `percsampler` synths fetch sample files from
-`/samples/…`; this app serves them from `static/samples/`, which has
-`kicks/`, `snares/`, `hats/` and `percs/` subfolders.
+The engine's `sampler`, `percsampler` and `granular` synths fetch sample files
+from `/samples/…`; this app serves them from `static/samples/`:
 
-`percsampler` builds a kit by choosing from those folders at random, and a
-browser can't list a directory over HTTP, so the app also serves
-`/samples/manifest.json` describing what's there. Practically: **drop a `.wav`
-into one of those four folders and it's immediately in the pool** — no config,
-no restart while the dev server is running. Loose files at the top level of
-`static/samples/` aren't picked up by the manifest, but are still loadable by
-name (that's where `sampler`'s built-in defaults live).
+```
+static/samples/
+├── kicks/  snares/  hats/  percs/    the four drum categories percsampler builds a kit from
+└── foley/                            field recordings — rain, rivers, birds, glass
+```
+
+Two synths pick files at random, and a browser can't list a directory over
+HTTP, so the app also serves `/samples/manifest.json` describing what's there.
+`percsampler` reads the four drum categories (which are fixed — its slot
+layout depends on them); `granular` reads **any** folder by name, `foley` by
+default. Practically: **drop a `.wav` into a folder — or make a new folder —
+and it's immediately in the pool**, no config and no restart while the dev
+server is running. Loose files at the top level of `static/samples/` aren't
+picked up by the manifest, but are still loadable by name (that's where
+`sampler`'s built-in defaults live).
+
+A note on `foley/`: these are unedited field recordings, so they're long (up
+to four minutes) and quiet (one peaks 30dB below another). `granular`
+gain-matches each one on load, and reports the match in the track summary.
 
 ### Patterns
 
@@ -124,10 +150,15 @@ app serves out of `static/patterns/`. Each subfolder is a **pack**:
 
 ```
 static/patterns/
-├── hiphopdrums/   boom-bap, dusty, halftime, laid-back, polymeter, broken
-├── darkchords/    minor-drift, seventh-fall, pedal-shift, nocturne, ...
-└── melodies/      pentatonic-cell, descending, arp-cell, call-response
+├── hiphopdrums/    boom-bap, dusty, halftime, laid-back, polymeter, broken
+├── darkchords/     minor-drift, seventh-fall, pedal-shift, nocturne, ...
+├── ambientchords/  drone-fifths, slow-bloom, suspended, open-ninths, tidal, halo
+└── melodies/       pentatonic-cell, descending, arp-cell, call-response
 ```
+
+`ambientchords` is written for pads rather than keyboards: sparse, wide
+voicings whose `duration` is longer than their `step_beats`, so chords overlap
+and bleed into one another. It's what `granular-pad` runs on.
 
 Same arrangement as samples, and for the same reason: a browser can't list a
 directory, so the app serves `/patterns/manifest.json` describing what's there.
