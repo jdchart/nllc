@@ -105,10 +105,20 @@ Homepage writes `localStorage` keys `nllc:audioLatencyHint` /
   `step_beats`, so chords overlap. The format is documented in
   `ribbit/docs/llm/overview.md`; the files are meant to be hand-edited.
 - Session files carry an optional top-level `readme` (an array of lines) that
-  the engine prints on load via `onMessage`. All nine shipped sessions
+  the engine prints on load via `onMessage`. All twelve shipped sessions
   (`demo`, `percs-demo`, `euclid-demo`, `euclid-ghosts`, `pattern-chords`,
-  `pattern-drums`, `goodenizer-demo`, `granular-pad`, `ambient-tape`) have
-  one; a new one should too.
+  `pattern-drums`, `goodenizer-demo`, `granular-pad`, `ambient-tape`,
+  `chorale-drift`, `chaos-states`, `cz-tapes`) have one; a new one should too.
+  `demo` is the starter and combines `euclid-ghosts` with `ambient-tape`;
+  `chorale-drift` is three `chorale` generators and no percussion;
+  `chaos-states` is `chaossynth` sequenced as timbres rather than pitches;
+  `cz-tapes` is five `czsynth` tracks and the only session built on presets.
+
+  **An object may not be named after a reserved command.** `chaos-states`'
+  main track is `riff` and not `states` because `/states` is a command: the
+  engine renames the colliding object on creation, and the file's own sends
+  and patches then point at a name nothing has, so loading throws part-way
+  through. See `RESERVED_NAMES` in `ribbit/src/ribbit.js`.
 - Every shipped session runs a `goodenizer` named `glue` on master, tuned per
   session (see each file's `master.processors`). `goodenizer-demo` is the one
   that exists to tour it and the four processors it composes.

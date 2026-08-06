@@ -1,0 +1,456 @@
+{
+  "version": 1,
+  "readme": [
+    "cz-tapes — five czsynth tracks and a dusty kit, at 68bpm in C minor.",
+    "",
+    "czsynth is an emulation of the Casio CZ-101 (1984), the phase-distortion",
+    "synthesizer behind most of what people mean by 'the Boards of Canada",
+    "sound'. There is no filter in it. One cosine table is read with a phase",
+    "that has been bent by a piecewise-linear function, so a period still takes",
+    "exactly one period but is traversed unevenly — and the DCW envelope moves",
+    "how hard it is bent. That sounds uncannily like a filter opening while",
+    "being nothing of the sort.",
+    "",
+    "The 28 presets are real patches, decoded from Casio sysex dumps — one",
+    "folder per record. /keys preset=random rolls a different one.",
+    "",
+    "  keys    turquoise-hexagon-sun-epiano   authored chord stabs",
+    "  flute   orangey-flute                  authored melody",
+    "  pad     twoism-pulse-pad               <- wash (chorale)",
+    "  bells   zander-two-bells               <- sparkle (randomnotes)",
+    "  bass    a03-bass                       authored root notes",
+    "  kick/kit  percsampler                  <- grid (euclidpercs)",
+    "",
+    "Every track is one preset plus seven modifier params on top of it. The one",
+    "that matters is dcw — this synth's filter knob:",
+    "",
+    "Try:",
+    "  /start",
+    "  /keys                      the preset, its waveform and both envelopes",
+    "  /keys dcw=0 8b             close it right down; every waveform is a sine",
+    "  /keys dcw=1 8b             and back",
+    "  /keys dcw=2                past where the hardware's envelope could reach",
+    "  /keys wave=square          override the waveform, preset untouched",
+    "  /keys wave=reso1           the 'resonant' wave — see the note below",
+    "  /keys wave=preset          give it back",
+    "  /keys env_time=4 8b        stretch every envelope; an epiano becomes a pad",
+    "  /keys preset=oirectine-epiano   a combination wave, with a sub-octave",
+    "  /bells lines=1             drop the line detuned two octaves up",
+    "  /flute vib_depth=60 8b     lean on the vibrato",
+    "  /pad detune=80 16b         drag the two lines apart",
+    "  /bass octave=0             out of the basement",
+    "  /keys random               roll every param at once",
+    "  /harmony root=58           move it all to Bb",
+    "",
+    "Two things behave unlike the rest of the engine, both on purpose:",
+    "",
+    "A preset is selected by an option, and the other four options each take",
+    "the sentinel 'preset', meaning 'whatever the tone says'. So choosing a new",
+    "preset never clobbers an override, and an override never has to be",
+    "re-applied. Set one back to 'preset' to return it.",
+    "",
+    "And on the three resonant waveforms — reso1/reso2/reso3 — dcw moves a",
+    "frequency, not a brightness. Those three are not phase distortion at all:",
+    "they are an inner sine hard-synced to the note and multiplied by a",
+    "per-cycle window, and dcw sets how many cycles fit in a period. Casio",
+    "named them after the window shape, which has confused people for forty",
+    "years.",
+    "",
+    "The effects follow the routing notes that came with the patches: a plate",
+    "on the verb bus (the Midiverb everything went through), a quarter-note",
+    "echo, a triplet delay with no feedback on the bells, a highs boost on the",
+    "keys and a low tilt on the bass. Width is all downstream — czsynth renders",
+    "mono, because the CZ-101 has one output and these records kept summing it.",
+    "",
+    "  warble -> keys.dcw      the epiano brightens and dulls over ~22 seconds",
+    "  drift  -> pad.detune    the pad slowly pulls itself out of tune",
+    "",
+    "A czsynth param is read once per note, not continuously — so a ramp or a",
+    "patch on dcw arrives note by note. Held notes keep the brightness they",
+    "started with, which is exactly how the hardware behaves."
+  ],
+  "clock": {"bpm": 68, "loopLengthBeats": 32},
+  "harmony": {"root": 60, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
+  "master": {
+    "params": {"gain": 0.9, "pan": 0},
+    "processors": [
+      {
+        "type": "goodenizer",
+        "name": "glue",
+        "active": true,
+        "options": {"character": "tape", "oversample": "2x"},
+        "params": {
+          "threshold": -18,
+          "ratio": 3.5,
+          "attack": 0.02,
+          "release": 0.25,
+          "makeup": 1.3,
+          "drive": 1,
+          "tone": -0.08,
+          "pivot": 1400,
+          "ceiling": -1,
+          "mix": 1
+        }
+      }
+    ]
+  },
+  "buses": [
+    {
+      "name": "verb",
+      "params": {"gain": 0.8, "pan": 0},
+      "processors": [
+        {
+          "type": "reverb",
+          "name": "plate",
+          "active": true,
+          "options": {"duration": 3.6, "decay": 2.2},
+          "params": {"wet": 1}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    },
+    {
+      "name": "echo",
+      "params": {"gain": 0.4, "pan": 0},
+      "processors": [
+        {
+          "type": "delay",
+          "name": "quarter",
+          "active": true,
+          "options": {"stereoOffset": 0.019},
+          "params": {"time": 0.882, "feedback": 0.34, "wet": 1}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "keys",
+      "active": true,
+      "params": {"gain": 0.62, "pan": -0.1},
+      "processors": [
+        {
+          "type": "tilt",
+          "name": "air",
+          "active": true,
+          "options": {},
+          "params": {"tone": 0.3, "pivot": 3200}
+        }
+      ],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.5},
+        {"destName": "echo", "gain": 0.12}
+      ],
+      "synth": {
+        "type": "czsynth",
+        "options": {
+          "preset": "turquoise-hexagon-sun-epiano",
+          "wave": "preset",
+          "lines": "preset",
+          "mod": "preset",
+          "octave": "preset"
+        },
+        "params": {
+          "dcw": 1,
+          "env_time": 1,
+          "detune": 0,
+          "vib_depth": 0,
+          "vib_rate": 1,
+          "pitch_env": 1,
+          "key_follow": 1
+        },
+        "events": [
+          {"beat": 0, "degree": 12, "velocity": 0.5, "duration": 0.25},
+          {"beat": 0, "degree": 15, "velocity": 0.46, "duration": 0.25},
+          {"beat": 0, "degree": 19, "velocity": 0.42, "duration": 0.25},
+          {"beat": 5.5, "degree": 12, "velocity": 0.34, "duration": 0.25},
+          {"beat": 5.5, "degree": 15, "velocity": 0.31, "duration": 0.25},
+          {"beat": 5.5, "degree": 19, "velocity": 0.28, "duration": 0.25},
+          {"beat": 8, "degree": 8, "velocity": 0.5, "duration": 0.25},
+          {"beat": 8, "degree": 12, "velocity": 0.46, "duration": 0.25},
+          {"beat": 8, "degree": 15, "velocity": 0.42, "duration": 0.25},
+          {"beat": 13.5, "degree": 8, "velocity": 0.34, "duration": 0.25},
+          {"beat": 13.5, "degree": 12, "velocity": 0.31, "duration": 0.25},
+          {"beat": 13.5, "degree": 15, "velocity": 0.28, "duration": 0.25},
+          {"beat": 16, "degree": 10, "velocity": 0.5, "duration": 0.25},
+          {"beat": 16, "degree": 15, "velocity": 0.46, "duration": 0.25},
+          {"beat": 16, "degree": 19, "velocity": 0.42, "duration": 0.25},
+          {"beat": 21.5, "degree": 10, "velocity": 0.34, "duration": 0.25},
+          {"beat": 21.5, "degree": 15, "velocity": 0.31, "duration": 0.25},
+          {"beat": 21.5, "degree": 19, "velocity": 0.28, "duration": 0.25},
+          {"beat": 24, "degree": 10, "velocity": 0.5, "duration": 0.25},
+          {"beat": 24, "degree": 14, "velocity": 0.46, "duration": 0.25},
+          {"beat": 24, "degree": 19, "velocity": 0.42, "duration": 0.25},
+          {"beat": 29.5, "degree": 10, "velocity": 0.34, "duration": 0.25},
+          {"beat": 29.5, "degree": 14, "velocity": 0.31, "duration": 0.25},
+          {"beat": 29.5, "degree": 19, "velocity": 0.28, "duration": 0.25}
+        ]
+      }
+    },
+    {
+      "name": "flute",
+      "active": true,
+      "params": {"gain": 0.4, "pan": 0.22},
+      "processors": [
+        {
+          "type": "tilt",
+          "name": "shade",
+          "active": true,
+          "options": {},
+          "params": {"tone": -0.28, "pivot": 2800}
+        }
+      ],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.75},
+        {"destName": "echo", "gain": 0.3}
+      ],
+      "synth": {
+        "type": "czsynth",
+        "options": {
+          "preset": "orangey-flute",
+          "wave": "preset",
+          "lines": "preset",
+          "mod": "preset",
+          "octave": "preset"
+        },
+        "params": {
+          "dcw": 0.9,
+          "env_time": 1,
+          "detune": 0,
+          "vib_depth": 8,
+          "vib_rate": 1,
+          "pitch_env": 1,
+          "key_follow": 1
+        },
+        "events": [
+          {"beat": 2, "degree": 7, "velocity": 0.38, "duration": 1.5},
+          {"beat": 5.5, "degree": 10, "velocity": 0.3, "duration": 1},
+          {"beat": 10, "degree": 12, "velocity": 0.42, "duration": 2},
+          {"beat": 14.5, "degree": 10, "velocity": 0.28, "duration": 1},
+          {"beat": 18, "degree": 15, "velocity": 0.44, "duration": 2},
+          {"beat": 22, "degree": 14, "velocity": 0.32, "duration": 1.5},
+          {"beat": 26, "degree": 12, "velocity": 0.3, "duration": 1},
+          {"beat": 28.5, "degree": 10, "velocity": 0.36, "duration": 3}
+        ]
+      }
+    },
+    {
+      "name": "pad",
+      "active": true,
+      "params": {"gain": 0.34, "pan": 0.05},
+      "processors": [],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.85},
+        {"destName": "echo", "gain": 0.2}
+      ],
+      "synth": {
+        "type": "czsynth",
+        "options": {
+          "preset": "twoism-pulse-pad",
+          "wave": "preset",
+          "lines": "preset",
+          "mod": "preset",
+          "octave": "preset"
+        },
+        "params": {
+          "dcw": 0.75,
+          "env_time": 1.6,
+          "detune": 12,
+          "vib_depth": 4,
+          "vib_rate": 0.6,
+          "pitch_env": 1,
+          "key_follow": 1
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "bells",
+      "active": true,
+      "params": {"gain": 0.24, "pan": -0.3},
+      "processors": [
+        {
+          "type": "delay",
+          "name": "triplet",
+          "active": true,
+          "options": {"stereoOffset": 0.011},
+          "params": {"time": 0.588, "feedback": 0, "wet": 0.7}
+        }
+      ],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.9}
+      ],
+      "synth": {
+        "type": "czsynth",
+        "options": {
+          "preset": "zander-two-bells",
+          "wave": "preset",
+          "lines": "preset",
+          "mod": "preset",
+          "octave": "preset"
+        },
+        "params": {
+          "dcw": 1,
+          "env_time": 0.8,
+          "detune": 0,
+          "vib_depth": 0,
+          "vib_rate": 1,
+          "pitch_env": 1,
+          "key_follow": 1
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "bass",
+      "active": true,
+      "params": {"gain": 0.55, "pan": 0},
+      "processors": [
+        {
+          "type": "tilt",
+          "name": "weight",
+          "active": true,
+          "options": {},
+          "params": {"tone": -0.35, "pivot": 260}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "verb", "gain": 0.1}],
+      "synth": {
+        "type": "czsynth",
+        "options": {
+          "preset": "a03-bass",
+          "wave": "preset",
+          "lines": "preset",
+          "mod": "preset",
+          "octave": "preset"
+        },
+        "params": {
+          "dcw": 0.8,
+          "env_time": 1,
+          "detune": 0,
+          "vib_depth": 0,
+          "vib_rate": 1,
+          "pitch_env": 1,
+          "key_follow": 1
+        },
+        "events": [
+          {"beat": 0, "degree": 0, "velocity": 0.7, "duration": 1.5},
+          {"beat": 3, "degree": 0, "velocity": 0.45, "duration": 0.5},
+          {"beat": 6.5, "degree": 3, "velocity": 0.4, "duration": 0.5},
+          {"beat": 8, "degree": 8, "velocity": 0.7, "duration": 1.5},
+          {"beat": 11, "degree": 8, "velocity": 0.45, "duration": 0.5},
+          {"beat": 14.5, "degree": 10, "velocity": 0.4, "duration": 0.5},
+          {"beat": 16, "degree": 3, "velocity": 0.7, "duration": 1.5},
+          {"beat": 19, "degree": 3, "velocity": 0.45, "duration": 0.5},
+          {"beat": 22.5, "degree": 5, "velocity": 0.4, "duration": 0.5},
+          {"beat": 24, "degree": 7, "velocity": 0.7, "duration": 1.5},
+          {"beat": 27, "degree": 7, "velocity": 0.45, "duration": 0.5},
+          {"beat": 30.5, "degree": 10, "velocity": 0.4, "duration": 0.5}
+        ]
+      }
+    },
+    {
+      "name": "kick",
+      "active": true,
+      "params": {"gain": 0.85, "pan": 0},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}],
+      "synth": {
+        "type": "percsampler",
+        "options": {"per_category": 3, "categories": ["kicks"]},
+        "params": {"dynamics": 0.15, "pan_spread": 0, "speed_spread": 0.04},
+        "events": []
+      }
+    },
+    {
+      "name": "kit",
+      "active": true,
+      "params": {"gain": 0.6, "pan": 0.08},
+      "processors": [
+        {
+          "type": "tilt",
+          "name": "dust",
+          "active": true,
+          "options": {},
+          "params": {"tone": -0.3, "pivot": 2200}
+        }
+      ],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.3},
+        {"destName": "echo", "gain": 0.08}
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {"per_category": 3, "categories": ["snares", "hats"]},
+        "params": {"dynamics": 0.4, "pan_spread": 0.35, "speed_spread": 0.09},
+        "events": []
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "chorale",
+      "name": "wash",
+      "options": {
+        "mode": "aeolian",
+        "progression": [0, 5, 2, 4],
+        "chord_size": 3,
+        "stack": 2,
+        "transpose": 0,
+        "voices": 4,
+        "chord_beats": 8
+      },
+      "params": {
+        "velocity": 0.4,
+        "note_beats": 8,
+        "overlap": 0.4,
+        "spread": 2,
+        "stagger": 1
+      }
+    },
+    {
+      "type": "randomnotes",
+      "name": "sparkle",
+      "options": {"scale": [24, 27, 31, 34, 36, 39]},
+      "params": {"probability": 0.2, "min_gap": 2}
+    },
+    {
+      "type": "euclidpercs",
+      "name": "grid",
+      "options": {
+        "preset": "tresillo",
+        "steps": 16,
+        "step_beats": 0.25,
+        "variation": 0.4,
+        "seed": 1978,
+        "per_category": 3,
+        "kicks": 3,
+        "kicks_rotate": 0,
+        "snares": 2,
+        "snares_rotate": 4,
+        "hats": 7,
+        "hats_rotate": 0,
+        "percs": 0,
+        "percs_rotate": 0
+      },
+      "params": {"velocity": 0.5, "swing": 0.14, "dropout": 0.12}
+    },
+    {"type": "lfo", "name": "warble", "options": {"waveform": "sine"}, "params": {"freq": 0.045}},
+    {"type": "lfo", "name": "drift", "options": {"waveform": "triangle"}, "params": {"freq": 0.021}}
+  ],
+  "patches": [
+    {"sourceName": "wash", "destName": "pad.notes", "depth": 0},
+    {"sourceName": "sparkle", "destName": "bells.notes", "depth": 0},
+    {"sourceName": "grid", "destName": "kick.notes", "depth": 0},
+    {"sourceName": "grid", "destName": "kit.notes", "depth": 0},
+    {"sourceName": "warble", "destName": "keys.dcw", "depth": 0.4},
+    {"sourceName": "drift", "destName": "pad.detune", "depth": 30}
+  ],
+  "states": {}
+}

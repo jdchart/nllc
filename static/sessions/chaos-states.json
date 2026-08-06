@@ -1,0 +1,319 @@
+{
+  "version": 1,
+  "readme": [
+    "chaos-states — a note is a timbre, not a pitch. 96bpm, 16-beat loop.",
+    "",
+    "chaossynth is a recreation of a Max/MSP patch: two sine oscillators, each",
+    "driven through an atan saturator into a resonant lowpass, and cross-wired",
+    "into each other. Two feedback loops make it chaotic. The inner one is per",
+    "voice — each filter's cutoff is driven by how loud that voice's own output",
+    "is, so getting louder closes the filter, which makes it quieter, which",
+    "opens it again. The outer one is between the voices — each oscillator's",
+    "pitch is bent at audio rate by the other's filtered output, so neither has",
+    "a pitch of its own for more than an instant.",
+    "",
+    "Ten 0..1 control points steer it, five per voice:",
+    "",
+    "  a_cross  how hard the OTHER voice bends this one's pitch (the chaos knob)",
+    "  a_drive  gain into the saturator, 0..50dB",
+    "  a_pitch  base pitch, 0..1 mapped onto MIDI 0..69",
+    "  a_res    filter resonance",
+    "  a_track  how much the voice's own loudness closes its filter",
+    "",
+    "and b_cross / b_drive / b_pitch / b_res / b_track for voice B. Voice A is",
+    "the left channel, voice B the right. /drone output=a to hear one alone.",
+    "",
+    "THE POINT OF THIS SESSION. `seed` builds one configuration of all ten",
+    "inputs per MIDI note, 0 to 127. Playing note 60 selects configuration 60 —",
+    "every time, in every session that shares the seed. So a MIDI note is a",
+    "*state*, and any generator that emits notes becomes a way to sequence",
+    "timbres instead of a melody.",
+    "",
+    "`spread` decides how far a note may pull the ten params you set by hand:",
+    "0 means not at all (every note identical — the params are the whole sound),",
+    "1 means the seeded state outright (the params stop mattering). In between,",
+    "your params are the centre and the seed decides how each note departs.",
+    "The three tracks here are that dial at three settings.",
+    "",
+    "  riff    spread=0.6, ten hand-written notes. Same rhythm every bar, but",
+    "          each note is a different sound — and note 36, which comes round",
+    "          three times, is the SAME sound each time. That repetition is the",
+    "          whole idea: chaotic, not random.",
+    "  flux    spread=0.95, driven by `roll` (randomnotes). Never repeats and",
+    "          never resembles itself. The instrument with its lid off.",
+    "  drone   spread=0, four long notes a bar. The seed is switched off, so the",
+    "          ten params ARE the sound — every note would be identical, except",
+    "          that two LFOs ride a_cross and b_track. A chaossynth param is read",
+    "          once, when the note starts (the rendering is JS, so there is no",
+    "          AudioParam to modulate mid-note), so the LFOs move the drone note",
+    "          by note rather than sliding: four different sounds a bar, walking.",
+    "  pulse   percsampler + `grid` (euclidpercs), so there's a floor to hang",
+    "          the rest on.",
+    "",
+    "Try:",
+    "  /start",
+    "  /riff                     the resolved state of note 60, and the seed",
+    "  /riff seed=random         a whole new instrument, same notes",
+    "  /riff seed=7              and back — seeds are reproducible",
+    "  /riff spread=0 8b         collapse to one sound; the riff loses its shape",
+    "  /riff spread=1 8b         and past your params entirely",
+    "  /riff a_cross=0.5 4b      more coupling: pitch stops meaning anything",
+    "  /riff a_cross=0.02 4b     almost decoupled — two clean drones",
+    "  /riff a_track=0 4b        kill the inner loop; filter stays wide open",
+    "  /riff a_res=0.95          and now it rings",
+    "  /riff pitch_track=1 8b    make the notes behave like notes again",
+    "  /riff random              re-roll all ten control points at once",
+    "  /drone output=a           voice A only, both channels",
+    "  /drone output=b           voice B only — the two halves are very different",
+    "  /drone output=stereo",
+    "  /flux stop                lose the wild one",
+    "  /roll probability=0.9     more of it",
+    "",
+    "The track is called `riff` and not `states` because `/states` is already a",
+    "command (it lists saved states). The engine renames a colliding object to",
+    "`states_2` on creation, and a session file that does it will not finish",
+    "loading — its own sends and patches then refer to a name nothing has.",
+    "",
+    "pitch_track is 0 on every track here, so a note is purely an index. Raise",
+    "it and the note is *also* added to both voices' base pitch in semitones —",
+    "at 1, note 69 puts an uncoupled voice at A440 and melodic material reads as",
+    "melodic. Half measures work: 0.3 is enough that a rising line rises.",
+    "",
+    "Events use `pitch` rather than `degree` on purpose. A degree is resolved",
+    "against /harmony, and shifting the root would silently renumber every state",
+    "— fine when a note means pitch, confusing when it means which sound. Patched",
+    "generators still resolve degrees normally, which is what makes `roll` walk",
+    "its scale through the state table.",
+    "",
+    "Each note renders its own buffer in JS (both feedback loops are single",
+    "sample, which no Web Audio node graph can express), so notes are capped at",
+    "8 seconds and a dense chord of long notes is the one way to make this",
+    "expensive. `drone` holds 4 beats = 2.5s, comfortably inside that.",
+    "",
+    "master runs a goodenizer called 'glue'. This instrument's output level",
+    "swings a lot between states — that's the compressor's job here, not a",
+    "polish pass. /glue mix=0 to hear how much it's doing."
+  ],
+  "clock": {"bpm": 96, "loopLengthBeats": 16},
+  "harmony": {"root": 48, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
+  "master": {
+    "params": {"gain": 0.85, "pan": 0},
+    "processors": [
+      {
+        "type": "goodenizer",
+        "name": "glue",
+        "active": true,
+        "options": {"character": "tape", "oversample": "2x"},
+        "params": {
+          "threshold": -18,
+          "ratio": 4,
+          "attack": 0.01,
+          "release": 0.18,
+          "makeup": 1.3,
+          "drive": 1.2,
+          "tone": -0.1,
+          "pivot": 900,
+          "ceiling": -1,
+          "mix": 1
+        }
+      }
+    ]
+  },
+  "buses": [
+    {
+      "name": "verb",
+      "params": {"gain": 0.8, "pan": 0},
+      "processors": [
+        {
+          "type": "reverb",
+          "name": "hall",
+          "active": true,
+          "options": {"duration": 5, "decay": 2.4},
+          "params": {"wet": 1}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    },
+    {
+      "name": "echo",
+      "params": {"gain": 0.4, "pan": 0},
+      "processors": [
+        {
+          "type": "delay",
+          "name": "tape",
+          "active": true,
+          "options": {"stereoOffset": 0.018},
+          "params": {"time": 0.9375, "feedback": 0.42, "wet": 1}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "riff",
+      "active": true,
+      "params": {"gain": 0.55, "pan": 0},
+      "processors": [],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.35},
+        {"destName": "echo", "gain": 0.25}
+      ],
+      "synth": {
+        "type": "chaossynth",
+        "options": {"seed": 7, "output": "stereo"},
+        "params": {
+          "a_cross": 0.14,
+          "a_drive": 0.42,
+          "a_pitch": 0.5,
+          "a_res": 0.62,
+          "a_track": 0.55,
+          "b_cross": 0.2,
+          "b_drive": 0.38,
+          "b_pitch": 0.58,
+          "b_res": 0.58,
+          "b_track": 0.6,
+          "spread": 0.6,
+          "pitch_track": 0,
+          "attack": 0.005,
+          "release": 0.22
+        },
+        "events": [
+          {"beat": 0, "pitch": 36, "velocity": 0.7, "duration": 0.75},
+          {"beat": 2, "pitch": 41, "velocity": 0.5, "duration": 0.5},
+          {"beat": 3.5, "pitch": 55, "velocity": 0.6, "duration": 1},
+          {"beat": 5, "pitch": 36, "velocity": 0.7, "duration": 0.75},
+          {"beat": 7, "pitch": 68, "velocity": 0.45, "duration": 0.5},
+          {"beat": 8, "pitch": 41, "velocity": 0.55, "duration": 1.5},
+          {"beat": 10.5, "pitch": 79, "velocity": 0.4, "duration": 0.5},
+          {"beat": 12, "pitch": 36, "velocity": 0.7, "duration": 0.75},
+          {"beat": 13, "pitch": 62, "velocity": 0.5, "duration": 0.5},
+          {"beat": 14.5, "pitch": 90, "velocity": 0.35, "duration": 1}
+        ]
+      }
+    },
+    {
+      "name": "flux",
+      "active": true,
+      "params": {"gain": 0.3, "pan": 0.2},
+      "processors": [],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.6},
+        {"destName": "echo", "gain": 0.5}
+      ],
+      "synth": {
+        "type": "chaossynth",
+        "options": {"seed": 4242, "output": "stereo"},
+        "params": {
+          "a_cross": 0.25,
+          "a_drive": 0.5,
+          "a_pitch": 0.6,
+          "a_res": 0.7,
+          "a_track": 0.6,
+          "b_cross": 0.3,
+          "b_drive": 0.55,
+          "b_pitch": 0.45,
+          "b_res": 0.75,
+          "b_track": 0.5,
+          "spread": 0.95,
+          "pitch_track": 0,
+          "attack": 0.002,
+          "release": 0.35
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "drone",
+      "active": true,
+      "params": {"gain": 0.42, "pan": -0.15},
+      "processors": [],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.5}
+      ],
+      "synth": {
+        "type": "chaossynth",
+        "options": {"seed": 1, "output": "stereo"},
+        "params": {
+          "a_cross": 0.08,
+          "a_drive": 0.3,
+          "a_pitch": 0.28,
+          "a_res": 0.72,
+          "a_track": 0.45,
+          "b_cross": 0.11,
+          "b_drive": 0.26,
+          "b_pitch": 0.34,
+          "b_res": 0.68,
+          "b_track": 0.5,
+          "spread": 0,
+          "pitch_track": 0,
+          "attack": 0.8,
+          "release": 1.4
+        },
+        "events": [
+          {"beat": 0, "pitch": 24, "velocity": 0.6, "duration": 4},
+          {"beat": 4, "pitch": 24, "velocity": 0.5, "duration": 4},
+          {"beat": 8, "pitch": 24, "velocity": 0.55, "duration": 4},
+          {"beat": 12, "pitch": 24, "velocity": 0.45, "duration": 4}
+        ]
+      }
+    },
+    {
+      "name": "pulse",
+      "active": true,
+      "params": {"gain": 0.5, "pan": 0},
+      "processors": [],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.12}
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {"per_category": 3},
+        "params": {"dynamics": 0.4, "pan_spread": 0.35, "speed_spread": 0.12},
+        "events": []
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "randomnotes",
+      "name": "roll",
+      "options": {"scale": [0, 7, 14, 23, 31, 42, 55, 61, 74, 88, 96, 109]},
+      "params": {"probability": 0.55, "min_gap": 0.5}
+    },
+    {
+      "type": "euclidpercs",
+      "name": "grid",
+      "options": {
+        "preset": "tresillo",
+        "steps": 16,
+        "step_beats": 1,
+        "variation": 0.3,
+        "seed": 12,
+        "per_category": 3,
+        "kicks": 3,
+        "snares": 2,
+        "hats": 9,
+        "percs": 5,
+        "kicks_rotate": 0,
+        "snares_rotate": 4,
+        "hats_rotate": 0,
+        "percs_rotate": 2
+      },
+      "params": {"velocity": 0.65, "swing": 0.12, "dropout": 0.15}
+    },
+    {"type": "lfo", "name": "swirl", "options": {"waveform": "sine"}, "params": {"freq": 0.07}},
+    {"type": "lfo", "name": "creep", "options": {"waveform": "triangle"}, "params": {"freq": 0.031}}
+  ],
+  "patches": [
+    {"sourceName": "roll", "destName": "flux.notes", "depth": 0},
+    {"sourceName": "grid", "destName": "pulse.notes", "depth": 0},
+    {"sourceName": "swirl", "destName": "drone.a_cross", "depth": 0.22},
+    {"sourceName": "creep", "destName": "drone.b_track", "depth": 0.3}
+  ],
+  "states": {}
+}

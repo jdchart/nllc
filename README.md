@@ -63,6 +63,10 @@ respectively a varied hip-hop kit and chords/melody on plucked strings.
 saturation, a tilt EQ, a limiter, and the `goodenizer` that combines all four.
 `granular-pad` makes chords out of field recordings — three `granular` tracks,
 each playing a foley sample back as a cloud of overlapping grains.
+`chaos-states` is the odd one out: a `chaossynth`, where a MIDI note selects a
+*timbre* rather than a pitch, so any note generator becomes a way to sequence
+sounds. `cz-tapes` is five `czsynth` tracks — a Casio CZ-101 emulation playing
+presets decoded from real patch dumps — over a dusty kit.
 Every session runs one of those on master as `glue`, so `/glue mix=0` will A/B
 the processing in any of them.
 See the [ribbit tutorial](../ribbit/docs/user/tutorial.md) for a walkthrough of

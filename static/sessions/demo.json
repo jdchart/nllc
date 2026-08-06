@@ -1,45 +1,90 @@
 {
   "version": 1,
   "readme": [
-    "demo — a starter session: one melodic track, one drum track, one shared reverb.",
+    "demo — the starter session: a generated drum kit under two tape pads, at",
+    "78bpm in A minor. A combination of the euclid-ghosts and ambient-tape",
+    "sessions, and a tour of the three ways sound gets scheduled in ribbit.",
     "",
-    "  lead    oscsynth (triangle), 4 authored events",
-    "  drums   sampler, 8 authored events",
-    "  fx      reverb bus; the 'wobble' LFO is patched into reverb.wet",
+    "  1. authored     lead — four events written into the file by hand.",
+    "                  /lead events lists them, remove_event=<n> prunes one.",
+    "  2. derived      grid + ghosts — two drum generators deriving a rhythm",
+    "                  from rules, patched into the four percussion tracks.",
+    "  3. varied       chords + shimmer — a hand-written pattern from the",
+    "                  ambientchords pack, seeded variations generated on it.",
+    "",
+    "Nothing here replaces anything: generated notes run alongside a track's",
+    "own authored events, and several generators can feed one track.",
+    "",
+    "  kick snare hats percs   percsampler, one drum category each",
+    "  pad                     tapepad — the chords, mid register",
+    "  haze                    tapepad — a slower, dirtier layer an octave up",
+    "  lead                    oscsynth — the four authored notes",
+    "  verb  echo              reverb and dotted-eighth delay buses",
+    "",
+    "The drum half:",
+    "",
+    "  grid    euclidpercs — the skeleton. Identical every pass; this is the",
+    "          thing you can count against.",
+    "  ghosts  markovpercs — the decoration. Quiet and off the beat, patched to",
+    "          snare/hats/percs only, never the kick. Because each track loads",
+    "          only its own category, a ghost hit for a category a track doesn't",
+    "          own is simply silent. No filtering, just routing.",
     "",
     "Try:",
     "  /start                     turn the engine on (nothing sounds until you do)",
+    "  /grid                      the fixed skeleton",
+    "  /ghosts                    the decoration, as a step string",
+    "  /ghosts seed=random        re-roll the decoration; the grid holds",
+    "  /grid dropout=0.4 8b       thin the skeleton, let the ghosts through",
+    "  /grid preset=fourfloor at=cycle    swap the backbone on the next bar",
+    "  /pad cutoff=400 16b        close the pad right down — the sub stays",
+    "  /pad wow=60 8b             warp the tape, slowly",
+    "  /haze hiss=0.6             tape noise as an instrument",
+    "  /chords variation=0.7      revoice the progression",
+    "  /chords pattern=tidal      a different one from the same pack",
     "  /lead waveform=square      swap the oscillator",
-    "  /lead gain=0.2 4b          ramp the fader over 4 beats",
-    "  /lead events               list what it's playing; remove_event=<n> to prune",
-    "  /clock bpm=140 8           ramp the tempo over 8 seconds",
-    "  /patch id=x1 depth=0.6     push the LFO harder into the reverb",
+    "  /lead events               list the authored notes",
+    "  /harmony root=53           move every pitched track to F",
+    "  /clock bpm=96 8            ramp the tempo over 8 seconds",
+    "  /pad random                re-roll every randomizable param at once",
+    "  /pad sat.r=false           leave one out of the next bulk re-roll",
     "",
     "Add at=beat or at=cycle to any command to land it on the next boundary.",
     "",
-    "master runs a goodenizer called 'glue' \u2014 compressor, saturator, tilt EQ",
+    "Scenes are made live rather than shipped in the file:",
+    "  /save quiet                snapshot the whole mix under a name",
+    "  /kick gain=0.1  /pad gain=0.9      wreck it",
+    "  /recall quiet 8b           ramp everything back over 8 beats",
+    "",
+    "Two LFOs, showing both kinds of patch:",
+    "  drift -> ghosts.velocity   a generator param, read once per note",
+    "  sweep -> pad.cutoff        a synth param, so each chord enters at a",
+    "                             different brightness",
+    "",
+    "master runs a goodenizer called 'glue' — compressor, saturator, tilt EQ",
     "and limiter in one box. /glue shows how hard it's working, /glue mix=0",
-    "takes it off. The goodenizer-demo session tours it in full."
+    "takes it off. The goodenizer-demo session tours it in full; chorale-drift",
+    "is the same pad idea with no rhythm at all."
   ],
-  "clock": {"bpm": 120, "loopLengthBeats": 4},
-  "harmony": {"root": 60, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
+  "clock": {"bpm": 78, "loopLengthBeats": 8},
+  "harmony": {"root": 57, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
   "master": {
-    "params": {"gain": 1, "pan": 0},
+    "params": {"gain": 0.9, "pan": 0},
     "processors": [
       {
         "type": "goodenizer",
         "name": "glue",
         "active": true,
-        "options": {"character": "soft", "oversample": "2x"},
+        "options": {"character": "tape", "oversample": "2x"},
         "params": {
-          "threshold": -20,
+          "threshold": -22,
           "ratio": 3,
-          "attack": 0.012,
-          "release": 0.16,
-          "makeup": 1.3,
+          "attack": 0.015,
+          "release": 0.2,
+          "makeup": 1.4,
           "drive": 1,
-          "tone": 0.1,
-          "pivot": 900,
+          "tone": 0.05,
+          "pivot": 950,
           "ceiling": -1,
           "mix": 1
         }
@@ -48,15 +93,29 @@
   },
   "buses": [
     {
-      "name": "fx",
-      "params": {"gain": 1, "pan": 0},
+      "name": "verb",
+      "params": {"gain": 0.8, "pan": 0},
       "processors": [
         {
           "type": "reverb",
-          "name": "reverb",
+          "name": "hall",
           "active": true,
-          "options": {"duration": 2.5, "decay": 3},
-          "params": {"wet": 0.400000006}
+          "options": {"duration": 4.5, "decay": 2.6},
+          "params": {"wet": 1}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    },
+    {
+      "name": "echo",
+      "params": {"gain": 0.55, "pan": 0},
+      "processors": [
+        {
+          "type": "delay",
+          "name": "tape",
+          "active": true,
+          "options": {"stereoOffset": 0.024},
+          "params": {"time": 0.5769, "feedback": 0.44, "wet": 1}
         }
       ],
       "sends": [{"destName": "master", "gain": 1}]
@@ -64,236 +123,229 @@
   ],
   "tracks": [
     {
+      "name": "kick",
+      "active": true,
+      "params": {"gain": 0.85, "pan": 0},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}],
+      "synth": {
+        "type": "percsampler",
+        "options": {"per_category": 3, "categories": ["kicks"]},
+        "params": {"dynamics": 0.12, "pan_spread": 0, "speed_spread": 0},
+        "events": []
+      }
+    },
+    {
+      "name": "snare",
+      "active": true,
+      "params": {"gain": 0.68, "pan": 0},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "verb", "gain": 0.3}],
+      "synth": {
+        "type": "percsampler",
+        "options": {"per_category": 3, "categories": ["snares"]},
+        "params": {"dynamics": 0.35, "pan_spread": 0, "speed_spread": 0.07},
+        "events": []
+      }
+    },
+    {
+      "name": "hats",
+      "active": true,
+      "params": {"gain": 0.44, "pan": 0},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "echo", "gain": 0.2}],
+      "synth": {
+        "type": "percsampler",
+        "options": {"per_category": 3, "categories": ["hats"]},
+        "params": {"dynamics": 0.5, "pan_spread": 0.6, "speed_spread": 0.22},
+        "events": []
+      }
+    },
+    {
+      "name": "percs",
+      "active": true,
+      "params": {"gain": 0.46, "pan": 0},
+      "processors": [
+        {
+          "type": "saturator",
+          "name": "crunch",
+          "active": true,
+          "options": {"character": "tape", "oversample": "2x"},
+          "params": {"drive": 4, "level": 0.9, "mix": 0.6}
+        }
+      ],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "echo", "gain": 0.38},
+        {"destName": "verb", "gain": 0.2}
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {"per_category": 3, "categories": ["percs"]},
+        "params": {"dynamics": 0.55, "pan_spread": 0.9, "speed_spread": 0.28},
+        "events": []
+      }
+    },
+    {
+      "name": "pad",
+      "active": true,
+      "params": {"gain": 0.55, "pan": -0.1},
+      "processors": [],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.5},
+        {"destName": "echo", "gain": 0.18}
+      ],
+      "synth": {
+        "type": "tapepad",
+        "options": {"waveform": "sawtooth", "voices": 3, "bits": 10},
+        "params": {
+          "cutoff": 1200,
+          "detune": 16,
+          "pan_spread": 0.6,
+          "sub": 0.35,
+          "attack": 1.4,
+          "release": 3,
+          "wow": 20,
+          "wow_rate": 0.8,
+          "flutter": 8,
+          "hiss": 0.12,
+          "sat": 2
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "haze",
+      "active": true,
+      "params": {"gain": 0.3, "pan": 0.2},
+      "processors": [],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.75},
+        {"destName": "echo", "gain": 0.32}
+      ],
+      "synth": {
+        "type": "tapepad",
+        "options": {"waveform": "triangle", "voices": 4, "bits": 8},
+        "params": {
+          "cutoff": 3000,
+          "detune": 26,
+          "pan_spread": 0.9,
+          "sub": 0,
+          "attack": 2.8,
+          "release": 4.5,
+          "wow": 32,
+          "wow_rate": 1.5,
+          "flutter": 18,
+          "hiss": 0.1,
+          "sat": 1.6
+        },
+        "events": []
+      }
+    },
+    {
       "name": "lead",
       "active": true,
-      "params": {"gain": 0.749999999, "pan": 0},
+      "params": {"gain": 0.4, "pan": 0.05},
       "processors": [],
-      "sends": [{"destName": "master", "gain": 1}, {"destName": "fx", "gain": 0.300000012}],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.35},
+        {"destName": "echo", "gain": 0.3}
+      ],
       "synth": {
         "type": "oscsynth",
         "options": {"waveform": "triangle"},
         "params": {},
         "events": [
-          {"beat": 0, "pitch": 48, "velocity": 0.5, "duration": 0.5},
-          {"beat": 1, "pitch": 50, "velocity": 0.5, "duration": 0.5},
-          {"beat": 2, "pitch": 52, "velocity": 0.5, "duration": 0.5},
-          {"beat": 3, "pitch": 55, "velocity": 0.5, "duration": 0.5}
-        ]
-      }
-    },
-    {
-      "name": "drums",
-      "active": true,
-      "params": {"gain": 0.799999993, "pan": 0},
-      "processors": [],
-      "sends": [{"destName": "master", "gain": 1}],
-      "synth": {
-        "type": "sampler",
-        "options": {},
-        "params": {},
-        "events": [
-          {"beat": 0, "pitch": 0, "velocity": 0.9, "duration": 0.2},
-          {"beat": 0.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
-          {"beat": 1, "pitch": 2, "velocity": 0.8, "duration": 0.2},
-          {"beat": 1.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
-          {"beat": 2, "pitch": 0, "velocity": 0.9, "duration": 0.2},
-          {"beat": 2.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
-          {"beat": 3, "pitch": 2, "velocity": 0.8, "duration": 0.2},
-          {"beat": 3.5, "pitch": 4, "velocity": 0.4, "duration": 0.2}
+          {"beat": 0, "degree": 12, "velocity": 0.4, "duration": 0.75},
+          {"beat": 1.5, "degree": 15, "velocity": 0.3, "duration": 0.75},
+          {"beat": 4, "degree": 19, "velocity": 0.4, "duration": 0.75},
+          {"beat": 6.5, "degree": 22, "velocity": 0.3, "duration": 1.5}
         ]
       }
     }
   ],
-  "modulators": [{"type": "lfo", "name": "wobble", "options": {"waveform": "sine"}, "params": {"freq": 0.25}}],
-  "patches": [{"sourceName": "wobble", "destName": "reverb.wet", "depth": 0.150000006}],
-  "states": {
-    "full": {
-      "clock": {"bpm": 120, "loopLengthBeats": 4},
-      "harmony": {"root": 60, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
-      "master": {
-        "params": {"gain": 1, "pan": 0},
-        "processors": [
-          {
-            "type": "goodenizer",
-            "name": "glue",
-            "active": true,
-            "options": {"character": "soft", "oversample": "2x"},
-            "params": {
-              "threshold": -20,
-              "ratio": 3,
-              "attack": 0.012,
-              "release": 0.16,
-              "makeup": 1.3,
-              "drive": 1,
-              "tone": 0.1,
-              "pivot": 900,
-              "ceiling": -1,
-              "mix": 1
-            }
-          }
-        ]
+  "modulators": [
+    {
+      "type": "euclidpercs",
+      "name": "grid",
+      "options": {
+        "preset": "backbeat",
+        "steps": 16,
+        "step_beats": 0.25,
+        "variation": 0.35,
+        "seed": 8675309,
+        "per_category": 3,
+        "kicks": 3,
+        "kicks_rotate": 0,
+        "snares": 2,
+        "snares_rotate": 4,
+        "hats": 4,
+        "hats_rotate": 0,
+        "percs": 0,
+        "percs_rotate": 0
       },
-      "buses": [
-        {
-          "name": "fx",
-          "params": {"gain": 1, "pan": 0},
-          "processors": [
-            {
-              "type": "reverb",
-              "name": "reverb",
-              "active": true,
-              "options": {"duration": 2.5, "decay": 3},
-              "params": {"wet": 0.400000006}
-            }
-          ],
-          "sends": [{"destName": "master", "gain": 1}]
-        }
-      ],
-      "tracks": [
-        {
-          "name": "lead",
-          "active": true,
-          "params": {"gain": 0.749999999, "pan": 0},
-          "processors": [],
-          "sends": [{"destName": "master", "gain": 1}, {"destName": "fx", "gain": 0.300000012}],
-          "synth": {
-            "type": "oscsynth",
-            "options": {"waveform": "triangle"},
-            "params": {},
-            "events": [
-              {"beat": 0, "pitch": 48, "velocity": 0.5, "duration": 0.5},
-              {"beat": 1, "pitch": 50, "velocity": 0.5, "duration": 0.5},
-              {"beat": 2, "pitch": 52, "velocity": 0.5, "duration": 0.5},
-              {"beat": 3, "pitch": 55, "velocity": 0.5, "duration": 0.5}
-            ]
-          }
-        },
-        {
-          "name": "drums",
-          "active": true,
-          "params": {"gain": 0.799999993, "pan": 0},
-          "processors": [],
-          "sends": [{"destName": "master", "gain": 1}],
-          "synth": {
-            "type": "sampler",
-            "options": {},
-            "params": {},
-            "events": [
-              {"beat": 0, "pitch": 0, "velocity": 0.9, "duration": 0.2},
-              {"beat": 0.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
-              {"beat": 1, "pitch": 2, "velocity": 0.8, "duration": 0.2},
-              {"beat": 1.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
-              {"beat": 2, "pitch": 0, "velocity": 0.9, "duration": 0.2},
-              {"beat": 2.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
-              {"beat": 3, "pitch": 2, "velocity": 0.8, "duration": 0.2},
-              {"beat": 3.5, "pitch": 4, "velocity": 0.4, "duration": 0.2}
-            ]
-          }
-        }
-      ],
-      "modulators": [
-        {
-          "type": "lfo",
-          "name": "wobble",
-          "options": {"waveform": "sine"},
-          "params": {"freq": 0.25}
-        }
-      ],
-      "patches": [{"sourceName": "wobble", "destName": "reverb.wet", "depth": 0.150000006}]
+      "params": {"velocity": 0.95, "swing": 0.14, "dropout": 0.05}
     },
-    "quiet": {
-      "clock": {"bpm": 120, "loopLengthBeats": 4},
-      "harmony": {"root": 60, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
-      "master": {
-        "params": {"gain": 1, "pan": 0},
-        "processors": [
-          {
-            "type": "goodenizer",
-            "name": "glue",
-            "active": true,
-            "options": {"character": "soft", "oversample": "2x"},
-            "params": {
-              "threshold": -20,
-              "ratio": 3,
-              "attack": 0.012,
-              "release": 0.16,
-              "makeup": 1.3,
-              "drive": 1,
-              "tone": 0.1,
-              "pivot": 900,
-              "ceiling": -1,
-              "mix": 1
-            }
-          }
-        ]
+    {
+      "type": "markovpercs",
+      "name": "ghosts",
+      "options": {
+        "style": "broken",
+        "seed": 99,
+        "steps": 16,
+        "step_beats": 0.25,
+        "density": 0.4,
+        "per_category": 3
       },
-      "buses": [
-        {
-          "name": "fx",
-          "params": {"gain": 1, "pan": 0},
-          "processors": [
-            {
-              "type": "reverb",
-              "name": "reverb",
-              "active": true,
-              "options": {"duration": 2.5, "decay": 3},
-              "params": {"wet": 0.600000024}
-            }
-          ],
-          "sends": [{"destName": "master", "gain": 1}]
-        }
-      ],
-      "tracks": [
-        {
-          "name": "lead",
-          "active": true,
-          "params": {"gain": 0.400000001, "pan": 0},
-          "processors": [],
-          "sends": [{"destName": "master", "gain": 1}, {"destName": "fx", "gain": 0.300000012}],
-          "synth": {
-            "type": "oscsynth",
-            "options": {"waveform": "triangle"},
-            "params": {},
-            "events": [
-              {"beat": 0, "pitch": 48, "velocity": 0.5, "duration": 0.5},
-              {"beat": 1, "pitch": 50, "velocity": 0.5, "duration": 0.5},
-              {"beat": 2, "pitch": 52, "velocity": 0.5, "duration": 0.5},
-              {"beat": 3, "pitch": 55, "velocity": 0.5, "duration": 0.5}
-            ]
-          }
-        },
-        {
-          "name": "drums",
-          "active": true,
-          "params": {"gain": 0.249999998, "pan": 0},
-          "processors": [],
-          "sends": [{"destName": "master", "gain": 1}],
-          "synth": {
-            "type": "sampler",
-            "options": {},
-            "params": {},
-            "events": [
-              {"beat": 0, "pitch": 0, "velocity": 0.9, "duration": 0.2},
-              {"beat": 0.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
-              {"beat": 1, "pitch": 2, "velocity": 0.8, "duration": 0.2},
-              {"beat": 1.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
-              {"beat": 2, "pitch": 0, "velocity": 0.9, "duration": 0.2},
-              {"beat": 2.5, "pitch": 4, "velocity": 0.4, "duration": 0.2},
-              {"beat": 3, "pitch": 2, "velocity": 0.8, "duration": 0.2},
-              {"beat": 3.5, "pitch": 4, "velocity": 0.4, "duration": 0.2}
-            ]
-          }
-        }
-      ],
-      "modulators": [
-        {
-          "type": "lfo",
-          "name": "wobble",
-          "options": {"waveform": "sine"},
-          "params": {"freq": 0.25}
-        }
-      ],
-      "patches": [{"sourceName": "wobble", "destName": "reverb.wet", "depth": 0.150000006}]
-    }
-  }
+      "params": {"velocity": 0.32, "swing": 0.14}
+    },
+    {
+      "type": "patternvariator",
+      "name": "chords",
+      "options": {
+        "pack": "ambientchords",
+        "pattern": "slow-bloom",
+        "seed": 20260801,
+        "variation": 0.3,
+        "density": 1,
+        "step_beats": 2,
+        "transpose": 0,
+        "per_category": 4
+      },
+      "params": {"velocity": 0.5, "swing": 0}
+    },
+    {
+      "type": "patternvariator",
+      "name": "shimmer",
+      "options": {
+        "pack": "ambientchords",
+        "pattern": "halo",
+        "seed": 8821,
+        "variation": 0.5,
+        "density": 0.7,
+        "step_beats": 2,
+        "transpose": 12,
+        "per_category": 4
+      },
+      "params": {"velocity": 0.36, "swing": 0}
+    },
+    {"type": "lfo", "name": "drift", "options": {"waveform": "sine"}, "params": {"freq": 0.037}},
+    {"type": "lfo", "name": "sweep", "options": {"waveform": "sine"}, "params": {"freq": 0.019}}
+  ],
+  "patches": [
+    {"sourceName": "grid", "destName": "kick.notes", "depth": 0},
+    {"sourceName": "grid", "destName": "snare.notes", "depth": 0},
+    {"sourceName": "grid", "destName": "hats.notes", "depth": 0},
+    {"sourceName": "ghosts", "destName": "snare.notes", "depth": 0},
+    {"sourceName": "ghosts", "destName": "hats.notes", "depth": 0},
+    {"sourceName": "ghosts", "destName": "percs.notes", "depth": 0},
+    {"sourceName": "chords", "destName": "pad.notes", "depth": 0},
+    {"sourceName": "shimmer", "destName": "haze.notes", "depth": 0},
+    {"sourceName": "drift", "destName": "ghosts.velocity", "depth": 0.12},
+    {"sourceName": "sweep", "destName": "pad.cutoff", "depth": 600}
+  ],
+  "states": {}
 }

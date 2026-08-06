@@ -173,7 +173,9 @@ type-owned assets.
 
 `static/sessions/` holds session JSON files: each one is both a
 `/code-editor/<name>` route and an entry in the homepage dropdown, purely by
-being in that folder. Nine ship: `demo.json`, `percs-demo.json` (four
+being in that folder. Twelve ship: `demo.json` (the starter session: a euclidean
+grid plus Markov ghosts under two `tapepad` layers and one authored track — a
+combination of `euclid-ghosts` and `ambient-tape`), `percs-demo.json` (four
 category-restricted `percsampler` tracks fed by one `markovpercs`, through
 reverb and delay buses), `euclid-demo.json` (the euclidean grid generator),
 `euclid-ghosts.json` (a euclidean backbone plus a Markov ghost layer on
@@ -183,10 +185,16 @@ melody on two `karplus` tracks), `goodenizer-demo.json` (the dynamics and
 tone processors: parallel compression on a bus, saturation and tilt on a
 track, a `goodenizer` on master, and an LFO patched into its threshold),
 `granular-pad.json` (three `granular` tracks over the `ambientchords` pack,
-making chords out of `foley/` field recordings) and `ambient-tape.json`
-(three `tapepad` layers over the same pack, plus a `hiphopdrums` beat).
+making chords out of `foley/` field recordings), `ambient-tape.json`
+(three `tapepad` layers over the same pack, plus a `hiphopdrums` beat) and
+`chorale-drift.json` (three `chorale` generators, no percussion at all, one of
+them driving two tracks at once) and `chaos-states.json` (three `chaossynth`
+tracks at `spread` 0.6/0.95/0 plus a euclidean kit — the worked example of a
+MIDI note selecting a state rather than a pitch) and `cz-tapes.json` (five
+`czsynth` tracks over a euclidean kit — the worked example of a preset-backed
+synth, and of the CZ's DCW behaving like a filter that isn't one).
 
-All nine carry a `goodenizer` insert named `glue` on master, tuned per
+All twelve carry a `goodenizer` insert named `glue` on master, tuned per
 session in the file's `master.processors`.
 
 The files are stored **width-budget compacted** — short objects and arrays

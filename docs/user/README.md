@@ -28,8 +28,11 @@ audio-options panel.
   contains), and the **audio options** panel (see below).
 - **`/code-editor`** — a **blank session**: nothing but the master channel.
 - **`/code-editor/<name>`** — the same page, auto-loading
-  `static/sessions/<name>.json` on open. Eight ship:
-  - **`demo`** — a couple of tracks, a reverb bus, an LFO patch.
+  `static/sessions/<name>.json` on open. Twelve ship:
+  - **`demo`** — the starter session, and a combination of `euclid-ghosts` and
+    `ambient-tape`: a generated drum kit (euclidean grid plus Markov ghosts)
+    under two `tapepad` layers, with one hand-authored `lead` track. Framed as
+    a tour of the three ways notes get scheduled — authored, derived, varied.
   - **`percs-demo`** — a four-track drum kit (kick, snare, hats, percs each on
     their own track) driven by one `markovpercs` rhythm, through reverb and
     delay buses.
@@ -51,6 +54,18 @@ audio-options panel.
     dusty beat: chords, a shimmer an octave up and an open-fifths drone, all
     out of the `ambientchords` pack, with two LFOs showing both kinds of
     patch into a synth param.
+  - **`chorale-drift`** — no rhythm at all: three `chorale` generators making
+    sustained overlapping harmony (close sevenths, ninths an octave up, and a
+    one-voice bass line), with one of them patched into two tracks so a
+    `tapepad` and a `karplus` sing the identical voicing.
+  - **`chaos-states`** — `chaossynth`, where a MIDI note selects a *timbre*
+    rather than a pitch: the same synth at three `spread` settings (a
+    hand-written riff, a `randomnotes`-driven wild layer, and a drone with two
+    LFOs on its control points) over a euclidean kit.
+  - **`cz-tapes`** — five `czsynth` tracks (a Casio CZ-101 emulation) over a
+    dusty kit: authored electric-piano stabs, a flute melody and a bassline,
+    plus a `chorale`-driven pad and `randomnotes` bells. The effect routing
+    follows the notes that came with the original patches.
   - **`goodenizer-demo`** — a guided tour of the five dynamics/tone
     processors: parallel compression on a bus, saturation and a tilt EQ on a
     track, a `goodenizer` on master, and an LFO patched into its compressor's

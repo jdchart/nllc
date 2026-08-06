@@ -1,0 +1,290 @@
+{
+  "version": 1,
+  "readme": [
+    "chorale-drift — three chorales and no rhythm at all, at 54bpm in A minor.",
+    "",
+    "chorale is the generator that makes sustained, overlapping harmony. It has",
+    "no rhythm and nothing random in it: every note is a pure function of the",
+    "absolute beat, so the texture is identical on every pass and after any",
+    "/stop /start. Two clocks run underneath — the chord clock (chord_beats)",
+    "advances the progression, the voice clock (note_beats) re-attacks each",
+    "voice — and because they're independent, a voice holds its old note across",
+    "a chord change. That overhang is where the suspensions come from.",
+    "",
+    "  bed     aeolian sevenths on 0,5,3,4 — close voicing, 4 voices",
+    "  halo    the same progression as ninths, an octave up, wider and slower",
+    "  roots   one voice, chord_size=1, an octave down: just the bass line",
+    "",
+    "  pad     tapepad, the body of the chord      <- bed",
+    "  glass   karplus, the same notes plucked     <- bed",
+    "  air     tapepad, high and washed out        <- halo",
+    "  bass    tapepad, sub wide open              <- roots",
+    "",
+    "pad and glass are driven by the *same* chorale — one generator patched to",
+    "two tracks, so a plucked string and a pad sing the identical voicing.",
+    "",
+    "Try:",
+    "  /start",
+    "  /bed                       the whole progression, as actually voiced",
+    "  /bed spread=3 16b          fan the voices apart over an octave and a half",
+    "  /bed spread=1 16b          and back to close position",
+    "  /bed stagger=0 8b          collapse the wash into block chords",
+    "  /bed stagger=1 8b          back to continuous",
+    "  /bed overlap=1.4 8b        notes hold nearly twice their period; thicker",
+    "  /bed mode=lydian           same progression, brighter",
+    "  /bed mode=phrygian         same progression, much darker",
+    "  /bed stack=4               stop stacking thirds; open fifths, no third",
+    "  /bed progression=0,3,5,1   rewrite the changes",
+    "  /bed chord_beats=32 at=cycle   half as much harmonic motion",
+    "  /bed note_beats=4 16b      voices re-attack twice as often",
+    "  /harmony root=53           move it all to F",
+    "  /glass stop                pads only",
+    "",
+    "A chorale param is read fresh when a voice attacks, not continuously, so",
+    "a ramp on spread or note_beats arrives voice by voice as each one re-enters",
+    "— the pad revoices itself over a cycle rather than sliding. That is the",
+    "point of the two LFOs:",
+    "",
+    "  breathe -> bed.spread     the voicing opens and closes over ~50 seconds",
+    "  tide    -> pad.cutoff     read once per note, so each entry is a",
+    "                            different brightness",
+    "",
+    "mode degrees are semitones here because the harmony context is chromatic",
+    "(the default). Set a non-chromatic /harmony scale= and they resolve as",
+    "steps of that scale instead.",
+    "",
+    "master runs a goodenizer called 'glue' — compressor, saturator, tilt EQ",
+    "and limiter in one box. /glue shows how hard it's working, /glue mix=0",
+    "takes it off."
+  ],
+  "clock": {"bpm": 54, "loopLengthBeats": 16},
+  "harmony": {"root": 57, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
+  "master": {
+    "params": {"gain": 0.9, "pan": 0},
+    "processors": [
+      {
+        "type": "goodenizer",
+        "name": "glue",
+        "active": true,
+        "options": {"character": "tape", "oversample": "2x"},
+        "params": {
+          "threshold": -20,
+          "ratio": 3,
+          "attack": 0.03,
+          "release": 0.3,
+          "makeup": 1.2,
+          "drive": 1,
+          "tone": -0.05,
+          "pivot": 1100,
+          "ceiling": -1,
+          "mix": 1
+        }
+      }
+    ]
+  },
+  "buses": [
+    {
+      "name": "verb",
+      "params": {"gain": 0.85, "pan": 0},
+      "processors": [
+        {
+          "type": "reverb",
+          "name": "hall",
+          "active": true,
+          "options": {"duration": 7, "decay": 2},
+          "params": {"wet": 1}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    },
+    {
+      "name": "echo",
+      "params": {"gain": 0.45, "pan": 0},
+      "processors": [
+        {
+          "type": "delay",
+          "name": "tape",
+          "active": true,
+          "options": {"stereoOffset": 0.022},
+          "params": {"time": 0.8333, "feedback": 0.48, "wet": 1}
+        }
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "pad",
+      "active": true,
+      "params": {"gain": 0.58, "pan": -0.12},
+      "processors": [],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.5},
+        {"destName": "echo", "gain": 0.15}
+      ],
+      "synth": {
+        "type": "tapepad",
+        "options": {"waveform": "sawtooth", "voices": 3, "bits": 11},
+        "params": {
+          "cutoff": 1400,
+          "detune": 14,
+          "pan_spread": 0.55,
+          "sub": 0.25,
+          "attack": 2.4,
+          "release": 5,
+          "wow": 18,
+          "wow_rate": 0.7,
+          "flutter": 7,
+          "hiss": 0.08,
+          "sat": 2
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "glass",
+      "active": true,
+      "params": {"gain": 0.3, "pan": 0.25},
+      "processors": [],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.7},
+        {"destName": "echo", "gain": 0.4}
+      ],
+      "synth": {
+        "type": "karplus",
+        "options": {"excitation": "noise"},
+        "params": {"damping": 0.45, "decay": 5.5, "brightness": 0.35},
+        "events": []
+      }
+    },
+    {
+      "name": "air",
+      "active": true,
+      "params": {"gain": 0.26, "pan": 0.15},
+      "processors": [],
+      "sends": [
+        {"destName": "master", "gain": 1},
+        {"destName": "verb", "gain": 0.9},
+        {"destName": "echo", "gain": 0.3}
+      ],
+      "synth": {
+        "type": "tapepad",
+        "options": {"waveform": "triangle", "voices": 4, "bits": 9},
+        "params": {
+          "cutoff": 3600,
+          "detune": 28,
+          "pan_spread": 0.95,
+          "sub": 0,
+          "attack": 4.5,
+          "release": 7,
+          "wow": 32,
+          "wow_rate": 1.4,
+          "flutter": 18,
+          "hiss": 0.1,
+          "sat": 1.5
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "bass",
+      "active": true,
+      "params": {"gain": 0.5, "pan": 0},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "verb", "gain": 0.12}],
+      "synth": {
+        "type": "tapepad",
+        "options": {"waveform": "triangle", "voices": 1, "bits": 12},
+        "params": {
+          "cutoff": 380,
+          "detune": 0,
+          "pan_spread": 0,
+          "sub": 1,
+          "attack": 1.2,
+          "release": 5,
+          "wow": 6,
+          "wow_rate": 0.45,
+          "flutter": 2,
+          "hiss": 0,
+          "sat": 2.6
+        },
+        "events": []
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "chorale",
+      "name": "bed",
+      "options": {
+        "mode": "aeolian",
+        "progression": [0, 5, 3, 4],
+        "chord_size": 4,
+        "stack": 2,
+        "transpose": 0,
+        "voices": 4,
+        "chord_beats": 16
+      },
+      "params": {
+        "velocity": 0.55,
+        "note_beats": 8,
+        "overlap": 0.6,
+        "spread": 1,
+        "stagger": 1
+      }
+    },
+    {
+      "type": "chorale",
+      "name": "halo",
+      "options": {
+        "mode": "aeolian",
+        "progression": [0, 5, 3, 4],
+        "chord_size": 5,
+        "stack": 2,
+        "transpose": 12,
+        "voices": 3,
+        "chord_beats": 16
+      },
+      "params": {
+        "velocity": 0.4,
+        "note_beats": 12,
+        "overlap": 0.8,
+        "spread": 2,
+        "stagger": 1
+      }
+    },
+    {
+      "type": "chorale",
+      "name": "roots",
+      "options": {
+        "mode": "aeolian",
+        "progression": [0, 5, 3, 4],
+        "chord_size": 1,
+        "stack": 2,
+        "transpose": -12,
+        "voices": 1,
+        "chord_beats": 16
+      },
+      "params": {
+        "velocity": 0.7,
+        "note_beats": 16,
+        "overlap": 0.25,
+        "spread": 0,
+        "stagger": 0
+      }
+    },
+    {"type": "lfo", "name": "breathe", "options": {"waveform": "sine"}, "params": {"freq": 0.021}},
+    {"type": "lfo", "name": "tide", "options": {"waveform": "triangle"}, "params": {"freq": 0.013}}
+  ],
+  "patches": [
+    {"sourceName": "bed", "destName": "pad.notes", "depth": 0},
+    {"sourceName": "bed", "destName": "glass.notes", "depth": 0},
+    {"sourceName": "halo", "destName": "air.notes", "depth": 0},
+    {"sourceName": "roots", "destName": "bass.notes", "depth": 0},
+    {"sourceName": "breathe", "destName": "bed.spread", "depth": 0.9},
+    {"sourceName": "tide", "destName": "pad.cutoff", "depth": 700}
+  ],
+  "states": {}
+}
