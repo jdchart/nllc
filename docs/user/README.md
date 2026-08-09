@@ -109,6 +109,15 @@ master, modulator strips, and a patch list. It reflects whatever the console (or
 a loaded session) creates, and its own controls write straight back to the
 engine. Collapse it to a thin rail to give the console more room.
 
+Each channel strip has a fader with a level meter, a pan dial, **M** and **S**
+buttons (mute and solo — the same thing `/kick mute` and `/lead solo` do, and
+they update from either side; master has no S, since soloing it would mean
+nothing), its insert chain, and its sends. A strip that's quiet because
+*another* channel is soloed shows S as an outline rather than a fill.
+
+Groups have no strip — they're a console-only way to address several objects at
+once (`/add_group name=kit members=kick,snare,hats`, then `/kit mute`).
+
 ## Transport
 
 The transport bar shows/controls the clock and has **Save** / **Load** buttons.
@@ -116,6 +125,27 @@ Save/Load run the same `/save_json` / `/load_json` commands the console would, s
 their results appear in the scrollback like any typed command. A saved session is
 a `.json` file (see [sessions](../../../ribbit/docs/user/commands.md)); loading one
 rebuilds the whole graph.
+
+## Recording
+
+Between the clock and the Save/Load buttons sit the recorder controls:
+
+- **REC** — start/stop. The dot blinks while recording, and the readout beside
+  it shows the running length and channel count; once stopped, it shows the
+  take's length.
+- **ST / MT** — stereo or multitrack. Stereo records master alone as one
+  `.wav`; multitrack records every track, every bus, and master as its own
+  file, downloaded together as a `.zip`. Locked while recording, since the
+  mode decides how many files a take has.
+- **Save** — encode and download the take. **×** — throw it away.
+
+These run `/record`, `/stop_record`, `/recording mode=…`, `/save_record` and
+`/clear_record`, so their results appear in the scrollback — which matters
+here, because "saved ribbit-….zip — 4 files, 24.0s" is your only confirmation
+that a download had something in it. Typing the commands gets you `at=beat` /
+`at=cycle`, which the buttons can't offer: `/record at=cycle` … `/stop_record
+at=cycle` gives a take that is a whole number of loops long. Full reference in
+[Recording](../../../ribbit/docs/user/commands.md#recording).
 
 ## Audio options
 

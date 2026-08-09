@@ -7,12 +7,16 @@
     // measure the loudness of.
     let { modulator, audioContext, onRemove = () => {}, onInsert = () => {} } = $props();
 
-    // An event-generating modulator (randomnotes) has no meaningful
-    // continuous output — its bipolar meter would read a flat 0 forever.
-    // Render a "note fired" flash instead, driven by the AudioContext
-    // timestamp the clock records on it each time a generated note is
-    // actually delivered somewhere (see clock.js's lastEventTime).
-    const isGenerator = $derived(typeof modulator.generateEvents === "function");
+    // A modulator that acts discretely rather than publishing a signal — an
+    // event generator (randomnotes), or one that reaches into the session
+    // itself on the clock's schedule (randomgestures) — has no meaningful
+    // continuous output, and its bipolar meter would read a flat 0 forever.
+    // Render a "fired" flash instead, driven by the AudioContext timestamp
+    // recorded on it each time something actually happens (see clock.js's
+    // lastEventTime, which randomgestures sets for itself).
+    const isGenerator = $derived(
+        typeof modulator.generateEvents === "function" || typeof modulator.onSchedule === "function"
+    );
 
     let value = $state(0);
     let noteFiring = $state(false);
@@ -71,9 +75,9 @@
     <button class="remove" onclick={() => onRemove(modulator)} title="Remove {modulator.name}">×</button>
     <button class="name" title="click to insert &quot;{modulator.name}&quot; into the console" onclick={() => onInsert(modulator.name)}>{modulator.name}</button>
     {#if isGenerator}
-        <div class="note-row" title="lights up each time a generated note fires">
+        <div class="note-row" title="lights up each time this modulator fires">
             <span class="note-dot" class:firing={noteFiring}></span>
-            <span class="note-label">notes</span>
+            <span class="note-label">{typeof modulator.generateEvents === "function" ? "notes" : "gestures"}</span>
         </div>
     {:else}
         <div class="meter">

@@ -4,6 +4,8 @@
     // through SessionPage.svelte/Mixer.svelte) — Save/Load below reuse the
     // real /save_json /load_json handlers rather than duplicating the
     // download/file-picker logic here.
+    import Recorder from "./Recorder.svelte";
+
     let { nllc, onRunCommand = () => {} } = $props();
 
     let running = $state(false);
@@ -74,6 +76,8 @@
             <span class="bpm">{+bpm.toFixed(1)} BPM</span>
         </div>
     </div>
+
+    <Recorder {nllc} {onRunCommand} />
 
     <div class="session-io">
         <button class="io-button" onclick={() => onRunCommand("/save_json")} title="Download the whole session as a .json file">Save JSON</button>

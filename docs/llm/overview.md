@@ -22,6 +22,7 @@ nllc/  (SvelteKit app)
 │   ├── code-editor/SessionPage.svelte   ← THE integration point (see below)
 │   ├── code-editor/CodeEditor.svelte    console: input + scrollback + ghost-text + history
 │   └── mixer/*.svelte                    live read/write view of the graph
+│                                          (Transport.svelte holds Recorder.svelte)
 ├── src/lib/scripts/
 │   ├── ollama.js                    Ollama() stub — future NL→command layer
 │   └── drag.js                      beginDrag(): shared pointer-drag selection suppression
@@ -78,6 +79,14 @@ Homepage writes `localStorage` keys `nllc:audioLatencyHint` /
   of the engine.
 - The engine (`ribbit`) is where new synths/processors/modulators/commands are
   added — not here. See `ribbit/docs/dev/`.
+- `Recorder.svelte` (inside `Transport.svelte`) drives the engine's recorder
+  entirely through `onRunCommand` — `/record`, `/stop_record`,
+  `/recording mode=`, `/save_record`, `/clear_record` — rather than touching
+  `nllc.recorder`, so results land in the scrollback. It polls recorder state
+  per animation frame for the same reason `Transport` polls the clock: the
+  engine's objects aren't Svelte state. The buttons deliberately can't express
+  `at=beat`/`at=cycle`; typing the commands is how you get a take bounded by
+  cycle boundaries.
 - The session dropdown is filled by a *server* load, so under `vite dev` it
   re-reads `static/sessions/` on every request (drop a file in, refresh, it's
   there) but a production build bakes the list at build/prerender time. The

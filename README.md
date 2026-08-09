@@ -8,7 +8,11 @@ layer), all playing against a shared, looping clock — a small, text-driven
 take on Max/MSP or SuperCollider. Some modulators generate notes instead of a
 continuous signal — patch one into a track's control input (`dest=<track>.notes`)
 for algorithmic pattern generation that runs alongside whatever you've
-authored by hand. The long-term goal is to drive it with natural language
+authored by hand; one takes no patch at all and roams the session gliding
+parameters by itself. Channels have mute and solo, and a **group** lets one
+command drive several objects at once. Whatever you play can be recorded to
+WAV — master in stereo, or every track/bus/master as its own file. The
+long-term goal is to drive it with natural language
 instead of commands, via a local Ollama model.
 
 NLLC is the **interface**; the audio engine lives in a separate package,
@@ -18,10 +22,11 @@ object model, the full slash-command vocabulary, session save/load, and how to
 add new synths/processors/modulators/commands — is documented in the
 [ribbit docs](../ribbit/docs/).
 
-The whole session — every track, bus, processor, modulator, and patch — can
-be saved to a `.json` file and loaded back, or captured as a named in-memory
+The whole session — every track, bus, processor, modulator, patch, and group,
+plus each channel's mute/solo state — can be saved to a `.json` file and loaded back, or captured as a named in-memory
 "state" you can `/recall` later with a smooth ramp instead of a hard cut
-(handy as a live "scene" tool).
+(handy as a live "scene" tool). A *recording* is separate from all of that —
+it's the audio, not the description, and downloads as its own file.
 
 ## Documentation
 

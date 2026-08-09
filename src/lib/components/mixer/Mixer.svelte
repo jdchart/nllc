@@ -58,7 +58,7 @@
              Tracks/Buses happen to end. -->
         <div class="master-slot">
             <MixerSection title="Master" collapsible={false}>
-                <MixerChannel label={nllc.master.name} audioContext={nllc.audioContext} channel={nllc.master} {patches} {onInsert} />
+                <MixerChannel label={nllc.master.name} audioContext={nllc.audioContext} channel={nllc.master} {patches} soloable={false} {onInsert} />
             </MixerSection>
         </div>
     </div>

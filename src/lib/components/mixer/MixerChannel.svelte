@@ -10,7 +10,10 @@
     // destination — a patch connects straight into the raw AudioParam
     // (see patch.js), so there's no bookkeeping on the param itself to read;
     // cross-referencing destName is the only way to know.
-    let { label, audioContext, channel, patches = [], onInsert = () => {}, onRemove } = $props();
+    // `soloable` is off for master alone (see Mixer.svelte) — soloing the
+    // channel everything already passes through has nothing to say, and the
+    // console refuses it for the same reason.
+    let { label, audioContext, channel, patches = [], soloable = true, onInsert = () => {}, onRemove } = $props();
     const node = $derived(channel.gainNode);
     const gainParam = $derived(channel.params.gain);
     const panParam = $derived(channel.params.pan);
@@ -34,6 +37,15 @@
 
     let sendsKey = $state("");
     let sendList = $state([]);
+
+    // Mute/solo live on the channel itself (a real node, not a param — see
+    // ribbit's channel.js), and can change from the console or a /recall as
+    // well as from these buttons, so they're polled with everything else.
+    // `soloSilenced` is the third state: this channel didn't ask for
+    // anything, something else is soloed.
+    let muted = $state(untrack(() => channel.muted));
+    let soloed = $state(untrack(() => channel.soloed));
+    let soloSilenced = $state(untrack(() => channel._soloSilenced));
 
     // Single rAF loop drives the level meter, keeps the fader/pan reflecting
     // external changes (console commands, automation), and polls this
@@ -64,6 +76,10 @@
             // but don't fight the user while they're actively dragging.
             if (!dragging) position = gainParam.get();
             if (!panDragging) pan = panParam.get();
+
+            if (muted !== channel.muted) muted = channel.muted;
+            if (soloed !== channel.soloed) soloed = channel.soloed;
+            if (soloSilenced !== channel._soloSilenced) soloSilenced = channel._soloSilenced;
 
             const currentIds = channel.processors.map((p) => `${p.id}:${p.active}`).join(",");
             if (currentIds !== processorIds) {
@@ -209,6 +225,28 @@
         {/each}
     </div>
 
+    <!-- Straight through to the engine rather than via the console: these
+         are the two controls you hit mid-phrase, and routing them through a
+         typed command would put them a scrollback line behind the click.
+         The console's own /name mute|solo does exactly the same thing. -->
+    <div class="mute-solo">
+        <button
+            class="ms"
+            class:on={muted}
+            title="{muted ? 'Unmute' : 'Mute'} {label} (fader position is untouched)"
+            onclick={() => channel.setMuted(!channel.muted)}
+        >M</button>
+        {#if soloable}
+            <button
+                class="ms solo"
+                class:on={soloed}
+                class:silenced={soloSilenced}
+                title={soloed ? `Unsolo ${label}` : `Solo ${label} — everything not feeding or fed by a soloed channel drops out`}
+                onclick={() => channel.setSoloed(!channel.soloed)}
+            >S</button>
+        {/if}
+    </div>
+
     <button class="label" title="click to insert &quot;{label}&quot; into the console" onclick={() => onInsert(label)}>{label}</button>
     {#if channel.source}
         <button
@@ -304,6 +342,51 @@
 
     .send:hover {
         color: var(--nllc-accent);
+    }
+
+    .mute-solo {
+        display: flex;
+        gap: 3px;
+    }
+
+    .ms {
+        font-family: var(--nllc-font-mono);
+        font-size: 0.6rem;
+        line-height: 1;
+        width: 20px;
+        padding: 3px 0;
+        color: var(--nllc-text-dim);
+        background: var(--nllc-bg);
+        border: 1px solid var(--nllc-border);
+        border-radius: 2px;
+        cursor: pointer;
+    }
+
+    .ms:hover {
+        color: var(--nllc-accent);
+        border-color: var(--nllc-accent);
+    }
+
+    /* Engaged mute reads as "this is why it's quiet", so it borrows the
+       meter's hot colour rather than the accent every other active control
+       uses — it's the one state you want to spot without reading. */
+    .ms.on {
+        color: var(--nllc-bg);
+        background: var(--nllc-meter-hot);
+        border-color: var(--nllc-meter-hot);
+    }
+
+    .ms.solo.on {
+        color: var(--nllc-bg);
+        background: var(--nllc-meter-mid);
+        border-color: var(--nllc-meter-mid);
+    }
+
+    /* Silenced by someone else's solo: an outline, not a fill — this channel
+       didn't ask for anything, so it shouldn't look like it did. */
+    .ms.solo.silenced {
+        color: var(--nllc-meter-mid);
+        border-color: var(--nllc-meter-mid);
     }
 
     .meter-and-fader {

@@ -118,11 +118,29 @@ derived data) as props and call its methods.
 **mixer/**
 - `Mixer.svelte` — a read/write view of the live graph; lays out channel strips,
   modulator strips, and the patch list.
-- `MixerChannel.svelte` — one track/bus/master strip (fader, pan, inserts, sends).
-  Also polls its processor list, mirroring SessionPage's poll pattern.
-- `MixerSection.svelte`, `ModulatorStrip.svelte`, `PatchList.svelte`,
+- `MixerChannel.svelte` — one track/bus/master strip (fader, pan, mute/solo,
+  inserts, sends). Also polls its processor list, its sends, and the channel's
+  `muted`/`soloed`/`_soloSilenced` flags, mirroring SessionPage's poll pattern —
+  all of those can change from the console or a `/recall`, not just from a
+  click. The M/S buttons call `channel.setMuted`/`setSoloed` directly rather
+  than running a console command, since they're hit mid-phrase and shouldn't
+  land a scrollback line behind the click. `soloable={false}` for master.
+- `ModulatorStrip.svelte` — meters a modulator's continuous output, or flashes
+  per firing for one that has none. A modulator counts as "flashing" if it
+  implements `generateEvents` (a note generator) *or* `onSchedule`
+  (`randomgestures`, which sets `lastEventTime` itself); the label reads
+  "notes" or "gestures" accordingly.
+- `MixerSection.svelte`, `PatchList.svelte`,
   `CollapsedRail.svelte`, `Transport.svelte` — sections, modulator controls, the
   patch list, the collapsed rail, and the transport/save-load bar.
+- `Recorder.svelte` — the recorder controls inside `Transport.svelte`: REC, a
+  duration/channel readout, an ST/MT mode toggle, and Save/discard. Like
+  Transport's own Save/Load buttons, every control runs the real console
+  command through `onRunCommand` rather than touching `nllc.recorder`
+  directly — `/record` is the one command that can take a moment (it compiles
+  an AudioWorklet on first use) and whose result the user actually needs to
+  read. State is polled in its own `requestAnimationFrame` loop, since the
+  recorder is a plain object mutated by engine code.
 
 ## Shared scripts (`src/lib/scripts/`)
 
