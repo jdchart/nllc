@@ -34,7 +34,7 @@ const MAX_QUEUED = 4;
 
 // Recognizes the console's `/llm` line and hands back what the user actually
 // wrote. Parsed here rather than by the engine's router because that router
-// splits a line on every "/" it finds and tokenizes `key=value` pairs — both
+// splits a line at every "/word" it finds and tokenizes `key=value` pairs — both
 // of which would mangle a sentence. Returns null for anything that isn't
 // `/llm`, which is the signal to fall through to the engine.
 export function parseLlmCommand(text) {

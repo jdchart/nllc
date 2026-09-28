@@ -13,6 +13,7 @@
     let input = $state("");
     let logEl;
     let inputEl;
+    let ghostEl;
 
     // What the input row reports while the LLM is working — model, elapsed
     // time, queue depth. Set from outside via setStatus (see
@@ -176,6 +177,19 @@
     function updateSuggestion(target) {
         if (!target) { suggestion = null; return; }
         suggestion = onSuggest(target.value, target.selectionStart);
+        syncGhostScroll();
+    };
+
+    // The input's own glyphs are transparent and the overlay paints the text
+    // (see the .ghost styles), so when a long line scrolls the input
+    // horizontally the overlay has to scroll with it — otherwise the visible
+    // text stays pinned to the start of the line while the caret runs off
+    // past its end. After a frame, so it reads the scroll position the
+    // browser settled on for this keystroke.
+    function syncGhostScroll() {
+        requestAnimationFrame(() => {
+            if (ghostEl && inputEl) ghostEl.scrollLeft = inputEl.scrollLeft;
+        });
     };
 
     // Accepts the current suggestion into `input`, splicing it into the
@@ -251,6 +265,7 @@
         requestAnimationFrame(() => {
             inputEl?.focus();
             inputEl?.setSelectionRange(cursor, cursor);
+            syncGhostScroll();
         });
     };
 
@@ -290,7 +305,7 @@
     <div class="input-row">
         <span class="prompt">&gt;</span>
         <div class="input-wrap">
-            <div class="ghost" aria-hidden="true"><span class="ghost-typed">{ghostParts.before}</span><span class="ghost-suggestion">{ghostParts.added}</span><span class="ghost-typed">{ghostParts.after}</span></div>
+            <div class="ghost" aria-hidden="true" bind:this={ghostEl}><span class="ghost-typed">{ghostParts.before}</span><span class="ghost-suggestion">{ghostParts.added}</span><span class="ghost-typed">{ghostParts.after}</span></div>
             <input
                 class="input"
                 type="text"
@@ -300,6 +315,7 @@
                 oninput={handleInput}
                 onkeyup={(event) => updateSuggestion(event.target)}
                 onclick={(event) => updateSuggestion(event.target)}
+                onscroll={syncGhostScroll}
                 placeholder="type a command..."
                 autocomplete="off"
                 spellcheck="false"

@@ -111,16 +111,28 @@
         };
     });
 
+    // A short glide while the engine runs (a fader jump would click). While
+    // it's stopped the AudioContext's clock is frozen, so a glide would never
+    // advance: the control would snap back to its old value on release and
+    // the move would only land on /start. A plain set takes effect at once.
+    function moveParam(param, value) {
+        if (audioContext.state !== "running") {
+            param.audioParam.cancelScheduledValues(audioContext.currentTime);
+            param.set(value);
+            return;
+        }
+        param.audioParam.cancelScheduledValues(audioContext.currentTime);
+        param.audioParam.setTargetAtTime(param.encode(value), audioContext.currentTime, 0.01);
+    };
+
     function handleInput(event) {
         position = Number(event.target.value);
-        gainParam.audioParam.cancelScheduledValues(audioContext.currentTime);
-        gainParam.audioParam.setTargetAtTime(gainParam.encode(position), audioContext.currentTime, 0.01);
+        moveParam(gainParam, position);
     };
 
     function setPan(value) {
         pan = panParam.clamp(value);
-        panParam.audioParam.cancelScheduledValues(audioContext.currentTime);
-        panParam.audioParam.setTargetAtTime(panParam.encode(pan), audioContext.currentTime, 0.01);
+        moveParam(panParam, pan);
     };
 
     // Rotary dial: drag vertically to change value, like a mixing-console knob

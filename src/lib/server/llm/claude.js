@@ -75,6 +75,15 @@ async function* lines(readable) {
 };
 
 export async function* chat({ model, system, prompt, format = null, conversationId = null, signal }) {
+    // Both arrive from the browser and become CLI arguments, so neither is
+    // passed on unchecked: a model outside the list, or a "conversation id"
+    // shaped like a flag, would otherwise reach claude's own option parser.
+    if (!MODELS.some((known) => known.id === model)) {
+        throw new Error(`unknown claude model "${model}" — expected ${MODELS.map((known) => known.id).join(", ")}`);
+    }
+    if (conversationId !== null && !/^[\w-]+$/.test(String(conversationId))) {
+        throw new Error("invalid conversation id");
+    }
     if (!await isAvailable()) {
         throw new Error(`\`${CLAUDE_BIN}\` not found on PATH — install Claude Code, or unset NLLC_CLAUDE_BIN`);
     }
@@ -103,6 +112,10 @@ export async function* chat({ model, system, prompt, format = null, conversation
     // A scratch cwd, so the CLI doesn't discover this repo's CLAUDE.md and
     // start behaving like it's here to work on ribbit's source.
     const child = spawn(CLAUDE_BIN, args, { cwd: tmpdir(), stdio: ["pipe", "pipe", "pipe"] });
+    // Listened for from the start, not after stdout drains: Node can emit
+    // "close" (on a process.nextTick) before the for-await below resumes, and
+    // a listener attached after that waits forever.
+    const closed = new Promise((resolve) => child.on("close", resolve));
 
     // The user turn goes over stdin rather than argv: it carries the session
     // state block (see llm-context.js), which grows with the size of the
@@ -165,7 +178,7 @@ export async function* chat({ model, system, prompt, format = null, conversation
             }
         }
 
-        const code = await new Promise((resolve) => child.on("close", resolve));
+        const code = await closed;
         if (failure) throw new Error(failure);
         if (code !== 0) throw new Error(stderr.trim() || `claude exited with code ${code}`);
     } finally {

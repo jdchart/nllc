@@ -67,12 +67,11 @@ derived data) as props and call its methods.
   temporarily down.
 - `code-editor/+page.svelte` — `<SessionPage />`, a blank session.
 - `code-editor/[session]/+page.svelte` — `<SessionPage
-  sessionUrl="/sessions/{slug}.json" />`, the slug coming straight from the URL
-  segment via its `+page.js`. Deliberately not validated against the real file
-  list: an unknown slug still renders the page and reports the 404 in
-  `SessionPage`'s banner, which keeps this route from needing its own server
-  load, and means a session file added while the app is running works
-  immediately.
+  sessionUrl="/sessions/{slug}.json" />`. Its universal `+page.js` load sends a
+  `HEAD` for that file and throws a real 404 for an unknown slug (it runs during
+  SSR too, so the status is honest), while a file added with the app running
+  still works immediately. `SessionPage`'s banner remains for a file that exists
+  but fails to load.
 - `+page.server.js` — lists `static/sessions/*.json` for the homepage dropdown.
   `static/` isn't in the module graph and a browser can't list a directory over
   HTTP, so this has to be a *server* load; it also parses each file to build the

@@ -39,7 +39,9 @@
 
         return () => {
             cancelAnimationFrame(rafId);
-            nllc.master.gainNode.disconnect(analyser);
+            // Same guard MixerChannel's tap has — a torn-down engine may
+            // already have taken this connection with it.
+            try { nllc.master.gainNode.disconnect(analyser); } catch {}
         };
     });
 

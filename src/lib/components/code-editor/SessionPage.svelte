@@ -37,7 +37,7 @@
     // ── The /llm command ────────────────────────────────────────────────
     // Intercepted here rather than registered with createCommandRouter,
     // because the engine's router is the wrong shape for prose: it splits a
-    // submitted line at every "/" it finds and parses the rest as key=value
+    // submitted line at every "/word" it finds and parses the rest as key=value
     // pairs. `/llm how do I sidechain the pad?` would be torn into fragments
     // before any handler saw it. Dispatching first also keeps engine commands
     // out of the LLM queue — `/kick stop` must never wait behind a question.
