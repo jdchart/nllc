@@ -54,6 +54,7 @@ Patch into a **track's notes** (`dest=<track>.notes`, no `depth=`):
 | `markovpercs` | generates one fixed pattern and loops it until reseeded | `velocity` `swing` | `style` `seed` `steps` `step_beats` `density` `per_category` |
 | `euclidpercs` | euclidean rhythms | `velocity` `swing` `dropout` | `preset` `steps` `step_beats` `variation` `seed` `per_category`, and `<cat>`/`<cat>_rotate` for each of `kicks` `snares` `hats` `percs` |
 | `patternvariator` | loads a hand-written pattern from `/patterns` and transforms it | `velocity` `swing` | `pack` `pattern` `seed` `variation` `density` `step_beats` `transpose` `per_category` |
+| `pianoroll` | a hand-written note pattern on its own loop, played by every track patched to it (one part, several instruments); edit with add_event/set_events like a track | `velocity` | `notes` `length` |
 | `chorale` | overlapping sustained voices through a chord progression | `velocity` `note_beats` `overlap` `spread` `stagger` | `mode` `progression` `chord_size` `stack` `chord_beats` `transpose` `voices` |
 
 Needs **no patch** — acts on objects directly:

@@ -1,0 +1,442 @@
+{
+  "version": 1,
+  "readme": [
+    "sample-picking \u2014 where samples come from, and choosing them.",
+    "",
+    "Every sample-based synth reads the host's library: the folders of",
+    "static/samples/ (in nllc/static/samples \u2014 lilypad links to it), listed by",
+    "/samples/manifest.json. Add a folder, and it's there \u2014 no code change.",
+    "",
+    "  percsampler  reads kicks/ snares/ hats/ percs/ \u2014 per_category files from",
+    "               each, pitch = slot (kicks 0.., snares next, \u2026). `categories=`",
+    "               loads only some, so one kit can be split over tracks \u2014 here",
+    "               `kit` plays kicks+snares and `tops` hats+percs (own reverb).",
+    "  sampler      any files, in a list; slot n plays on pitch n (`chops`).",
+    "  granular     one recording from any folder (`texture`, from foley/).",
+    "",
+    "A fresh one picks at random; a saved session pins the files it landed on.",
+    "In lilypad, select a track: the inspector's SAMPLES section has a picker",
+    "(\u25b6 to listen) for every slot. The console equivalent, quoted for spaces:",
+    "  /chops samples=\"kicks/CLAUDE - kick03.wav,percs/CLAUDE - glitch02.wav\"",
+    "  /texture folder=foley      /texture sample=random",
+    "  /kit samples=random        roll a new kit (keeps categories)"
+  ],
+  "clock": {
+    "bpm": 90,
+    "loopLengthBeats": 4
+  },
+  "harmony": {
+    "root": 60,
+    "scale": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "master": {
+    "params": {
+      "gain": 1,
+      "pan": 0
+    },
+    "no_random": [
+      "gain"
+    ],
+    "processors": [],
+    "automation": []
+  },
+  "buses": [
+    {
+      "name": "room",
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [
+        {
+          "type": "reverb",
+          "name": "reverb",
+          "active": true,
+          "options": {
+            "duration": 1.2,
+            "decay": 3
+          },
+          "params": {
+            "wet": 1
+          },
+          "automation": []
+        }
+      ],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "kit",
+      "active": true,
+      "params": {
+        "gain": 0.8500000012380492,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {
+          "samples": [
+            "kicks/CLAUDE - kick02.wav",
+            "kicks/CLAUDE - kick04.wav",
+            "snares/CLAUDE - distorted snare06.wav",
+            "snares/Glorkglunk - snare 1.wav",
+            null,
+            null,
+            null,
+            null
+          ],
+          "per_category": 2,
+          "categories": [
+            "kicks",
+            "snares"
+          ]
+        },
+        "params": {
+          "dynamics": 0.25,
+          "pan_spread": 0.4000000059604645,
+          "speed_spread": 0.10000000149011612
+        },
+        "events": [
+          {
+            "beat": 0,
+            "pitch": 0,
+            "velocity": 1,
+            "duration": 0.25
+          },
+          {
+            "beat": 0.75,
+            "pitch": 1,
+            "velocity": 0.6,
+            "duration": 0.25
+          },
+          {
+            "beat": 1,
+            "pitch": 2,
+            "velocity": 0.95,
+            "duration": 0.25
+          },
+          {
+            "beat": 2,
+            "pitch": 0,
+            "velocity": 1,
+            "duration": 0.25
+          },
+          {
+            "beat": 2.5,
+            "pitch": 0,
+            "velocity": 0.8,
+            "duration": 0.25
+          },
+          {
+            "beat": 3,
+            "pitch": 3,
+            "velocity": 0.95,
+            "duration": 0.25
+          }
+        ]
+      }
+    },
+    {
+      "name": "tops",
+      "active": true,
+      "params": {
+        "gain": 0.6000000059890975,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "room",
+          "gain": 0.4000000059604645
+        }
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {
+          "samples": [
+            null,
+            null,
+            null,
+            null,
+            "hats/CLAUDE - hat01.wav",
+            "hats/CLAUDE - hat03.wav",
+            "percs/CLAUDE - glitch01.wav",
+            "percs/CLAUDE - glitch03.wav"
+          ],
+          "per_category": 2,
+          "categories": [
+            "hats",
+            "percs"
+          ]
+        },
+        "params": {
+          "dynamics": 0.25,
+          "pan_spread": 0.6000000238418579,
+          "speed_spread": 0.10000000149011612
+        },
+        "events": [
+          {
+            "beat": 0,
+            "pitch": 4,
+            "velocity": 0.6,
+            "duration": 0.25
+          },
+          {
+            "beat": 0.5,
+            "pitch": 5,
+            "velocity": 0.35,
+            "duration": 0.25
+          },
+          {
+            "beat": 1,
+            "pitch": 4,
+            "velocity": 0.6,
+            "duration": 0.25
+          },
+          {
+            "beat": 1.5,
+            "pitch": 5,
+            "velocity": 0.35,
+            "duration": 0.25
+          },
+          {
+            "beat": 2,
+            "pitch": 4,
+            "velocity": 0.6,
+            "duration": 0.25
+          },
+          {
+            "beat": 2.5,
+            "pitch": 5,
+            "velocity": 0.35,
+            "duration": 0.25
+          },
+          {
+            "beat": 3,
+            "pitch": 4,
+            "velocity": 0.6,
+            "duration": 0.25
+          },
+          {
+            "beat": 3.5,
+            "pitch": 5,
+            "velocity": 0.35,
+            "duration": 0.25
+          },
+          {
+            "beat": 1.75,
+            "pitch": 6,
+            "velocity": 0.5,
+            "duration": 0.25
+          },
+          {
+            "beat": 3.25,
+            "pitch": 7,
+            "velocity": 0.5,
+            "duration": 0.25
+          }
+        ]
+      }
+    },
+    {
+      "name": "chops",
+      "active": true,
+      "params": {
+        "gain": 0.5499999933504349,
+        "pan": 0.25
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ],
+      "synth": {
+        "type": "sampler",
+        "options": {
+          "samples": [
+            "percs/CLAUDE - glitch02.wav",
+            "percs/CLAUDE - glitch04.wav",
+            "snares/Glorkglunk - snare 10.wav",
+            "kicks/CLAUDE - kick03.wav"
+          ]
+        },
+        "params": {},
+        "events": [
+          {
+            "beat": 0,
+            "pitch": 0,
+            "velocity": 0.8,
+            "duration": 0.25
+          },
+          {
+            "beat": 0.5,
+            "pitch": 1,
+            "velocity": 0.6,
+            "duration": 0.25
+          },
+          {
+            "beat": 1.5,
+            "pitch": 0,
+            "velocity": 0.7,
+            "duration": 0.25
+          },
+          {
+            "beat": 2.25,
+            "pitch": 2,
+            "velocity": 0.7,
+            "duration": 0.25
+          },
+          {
+            "beat": 3,
+            "pitch": 3,
+            "velocity": 0.9,
+            "duration": 0.25
+          },
+          {
+            "beat": 3.5,
+            "pitch": 1,
+            "velocity": 0.5,
+            "duration": 0.25
+          }
+        ]
+      }
+    },
+    {
+      "name": "texture",
+      "active": true,
+      "params": {
+        "gain": 0.50000000133581,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "room",
+          "gain": 0.30000001192092896
+        }
+      ],
+      "synth": {
+        "type": "granular",
+        "options": {
+          "sample": "foley/BFNK - City Birds.wav",
+          "folder": "foley",
+          "window": "hann",
+          "direction": "forward",
+          "root": 60
+        },
+        "params": {
+          "density": 24,
+          "grain_size": 0.20000000298023224,
+          "spray": 1.5,
+          "position": 0,
+          "drift": 0.05000000074505806,
+          "pitch_spread": 0.15000000596046448,
+          "pan_spread": 0.800000011920929,
+          "attack": 1.2000000476837158,
+          "release": 2
+        },
+        "events": [
+          {
+            "beat": 0,
+            "pitch": 60,
+            "velocity": 0.8,
+            "duration": 4
+          },
+          {
+            "beat": 0,
+            "pitch": 67,
+            "velocity": 0.5,
+            "duration": 4
+          }
+        ]
+      }
+    }
+  ],
+  "modulators": [],
+  "patches": [],
+  "states": {},
+  "lilypad": {
+    "positions": {
+      "kit": {
+        "x": 0,
+        "y": 0
+      },
+      "tops": {
+        "x": 0,
+        "y": 220
+      },
+      "chops": {
+        "x": 0,
+        "y": 440
+      },
+      "texture": {
+        "x": 0,
+        "y": 640
+      },
+      "room": {
+        "x": 340,
+        "y": 260
+      },
+      "master": {
+        "x": 620,
+        "y": 180
+      }
+    }
+  }
+}

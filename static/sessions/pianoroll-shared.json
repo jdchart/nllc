@@ -1,0 +1,459 @@
+{
+  "version": 1,
+  "readme": [
+    "pianoroll-shared \u2014 one part, several instruments.",
+    "",
+    "`chords` and `bass` are pianoroll modulators: note patterns that belong to",
+    "no track. `chords` is patched into BOTH `keys` (a karplus pluck) and `pad`",
+    "(tapepad) \u2014 edit it once and both follow. `bass` plays `sub`. `drums` keeps",
+    "its own pattern on the track itself, like any track can.",
+    "",
+    "In lilypad: click a node's mini roll (or 'piano roll\u2026' in the inspector) to",
+    "edit a pattern. On `drums` the rows are its sample slots, not pitches.",
+    "",
+    "Try:",
+    "  /start",
+    "  /chords events              the pattern, as a list and as one line",
+    "  /chords length=6            a 6-beat roll against the 8-beat loop",
+    "  /unpatch id=<x> \u2026           take the pad off the chords (see /patches)",
+    "  /bass velocity=0.5 4b       the roll's own fader"
+  ],
+  "clock": {
+    "bpm": 84,
+    "loopLengthBeats": 8
+  },
+  "harmony": {
+    "root": 60,
+    "scale": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "master": {
+    "params": {
+      "gain": 1,
+      "pan": 0
+    },
+    "no_random": [
+      "gain"
+    ],
+    "processors": [],
+    "automation": []
+  },
+  "buses": [
+    {
+      "name": "verb",
+      "params": {
+        "gain": 0.6000000059890975,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [
+        {
+          "type": "reverb",
+          "name": "reverb",
+          "active": true,
+          "options": {
+            "duration": 2.5,
+            "decay": 3
+          },
+          "params": {
+            "wet": 1
+          },
+          "automation": []
+        }
+      ],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "keys",
+      "active": true,
+      "params": {
+        "gain": 0.749999999231994,
+        "pan": -0.20000000298023224
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "verb",
+          "gain": 0.44999998807907104
+        }
+      ],
+      "synth": {
+        "type": "karplus",
+        "options": {
+          "excitation": "noise"
+        },
+        "params": {
+          "damping": 0.4000000059604645,
+          "decay": 2.5,
+          "brightness": 0.5
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "pad",
+      "active": true,
+      "params": {
+        "gain": 0.50000000133581,
+        "pan": 0.20000000298023224
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "verb",
+          "gain": 0.3499999940395355
+        }
+      ],
+      "synth": {
+        "type": "tapepad",
+        "options": {
+          "waveform": "sawtooth",
+          "voices": 3,
+          "bits": 12
+        },
+        "params": {
+          "wow": 18,
+          "flutter": 10,
+          "wow_rate": 0.9999999866636244,
+          "hiss": 0.14999999354283017,
+          "sat": 1.399999976158142,
+          "cutoff": 1800,
+          "detune": 14,
+          "pan_spread": 0.5,
+          "sub": 0.3499999940395355,
+          "attack": 0.4000000059604645,
+          "release": 1.5
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "sub",
+      "active": true,
+      "params": {
+        "gain": 0.6999999972003361,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ],
+      "synth": {
+        "type": "oscsynth",
+        "options": {
+          "waveform": "sine"
+        },
+        "params": {},
+        "events": []
+      }
+    },
+    {
+      "name": "drums",
+      "active": true,
+      "params": {
+        "gain": 0.7999999931550191,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ],
+      "synth": {
+        "type": "percsampler",
+        "options": {
+          "samples": [
+            "kicks/CLAUDE - kick01.wav",
+            "kicks/CLAUDE - kick20.wav",
+            "snares/Glorkglunk - snare 6.wav",
+            "snares/Glorkglunk - snare 8.wav",
+            "hats/CLAUDE - hat04.wav",
+            "hats/CLAUDE - hat12.wav",
+            "percs/sunnk - strange intonate - hats -007.wav",
+            "percs/Hlessi - Metal Perc 3.wav"
+          ],
+          "per_category": 2,
+          "categories": [
+            "kicks",
+            "snares",
+            "hats",
+            "percs"
+          ]
+        },
+        "params": {
+          "dynamics": 0.25,
+          "pan_spread": 0.4000000059604645,
+          "speed_spread": 0.10000000149011612
+        },
+        "events": [
+          {
+            "beat": 0,
+            "pitch": 0,
+            "velocity": 1,
+            "duration": 0.25
+          },
+          {
+            "beat": 2.5,
+            "pitch": 0,
+            "velocity": 1,
+            "duration": 0.25
+          },
+          {
+            "beat": 4,
+            "pitch": 0,
+            "velocity": 1,
+            "duration": 0.25
+          },
+          {
+            "beat": 6.5,
+            "pitch": 0,
+            "velocity": 1,
+            "duration": 0.25
+          },
+          {
+            "beat": 2,
+            "pitch": 2,
+            "velocity": 0.9,
+            "duration": 0.25
+          },
+          {
+            "beat": 6,
+            "pitch": 2,
+            "velocity": 0.9,
+            "duration": 0.25
+          },
+          {
+            "beat": 0,
+            "pitch": 4,
+            "velocity": 0.55,
+            "duration": 0.25
+          },
+          {
+            "beat": 0.5,
+            "pitch": 5,
+            "velocity": 0.35,
+            "duration": 0.25
+          },
+          {
+            "beat": 1,
+            "pitch": 4,
+            "velocity": 0.55,
+            "duration": 0.25
+          },
+          {
+            "beat": 1.5,
+            "pitch": 5,
+            "velocity": 0.35,
+            "duration": 0.25
+          },
+          {
+            "beat": 2,
+            "pitch": 4,
+            "velocity": 0.55,
+            "duration": 0.25
+          },
+          {
+            "beat": 2.5,
+            "pitch": 5,
+            "velocity": 0.35,
+            "duration": 0.25
+          },
+          {
+            "beat": 3,
+            "pitch": 4,
+            "velocity": 0.55,
+            "duration": 0.25
+          },
+          {
+            "beat": 3.5,
+            "pitch": 5,
+            "velocity": 0.35,
+            "duration": 0.25
+          },
+          {
+            "beat": 4,
+            "pitch": 4,
+            "velocity": 0.55,
+            "duration": 0.25
+          },
+          {
+            "beat": 4.5,
+            "pitch": 5,
+            "velocity": 0.35,
+            "duration": 0.25
+          },
+          {
+            "beat": 5,
+            "pitch": 4,
+            "velocity": 0.55,
+            "duration": 0.25
+          },
+          {
+            "beat": 5.5,
+            "pitch": 5,
+            "velocity": 0.35,
+            "duration": 0.25
+          },
+          {
+            "beat": 6,
+            "pitch": 4,
+            "velocity": 0.55,
+            "duration": 0.25
+          },
+          {
+            "beat": 6.5,
+            "pitch": 5,
+            "velocity": 0.35,
+            "duration": 0.25
+          },
+          {
+            "beat": 7,
+            "pitch": 4,
+            "velocity": 0.55,
+            "duration": 0.25
+          },
+          {
+            "beat": 7.5,
+            "pitch": 5,
+            "velocity": 0.35,
+            "duration": 0.25
+          },
+          {
+            "beat": 7.5,
+            "pitch": 6,
+            "velocity": 0.6,
+            "duration": 0.25
+          }
+        ]
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "pianoroll",
+      "name": "chords",
+      "options": {
+        "notes": "0:57:1.9:0.7,0:60:1.9:0.7,0:64:1.9:0.7,0:67:1.9:0.7,2:53:1.9:0.7,2:57:1.9:0.7,2:60:1.9:0.7,2:64:1.9:0.7,4:55:1.9:0.7,4:59:1.9:0.7,4:60:1.9:0.7,4:64:1.9:0.7,6:55:1.9:0.7,6:59:1.9:0.7,6:62:1.9:0.7,6:64:1.9:0.7",
+        "length": 8
+      },
+      "params": {
+        "velocity": 1
+      },
+      "automation": []
+    },
+    {
+      "type": "pianoroll",
+      "name": "bass",
+      "options": {
+        "notes": "0:45:1.5:0.9,1.5:57:0.5:0.6,2:41:1.75:0.9,4:48:1.5:0.9,5.5:48:0.5:0.6,6:43:1.75:0.9",
+        "length": 8
+      },
+      "params": {
+        "velocity": 1
+      },
+      "automation": []
+    }
+  ],
+  "patches": [
+    {
+      "sourceName": "chords",
+      "destName": "keys.notes"
+    },
+    {
+      "sourceName": "chords",
+      "destName": "pad.notes"
+    },
+    {
+      "sourceName": "bass",
+      "destName": "sub.notes"
+    }
+  ],
+  "lilypad": {
+    "positions": {
+      "chords": {
+        "x": 0,
+        "y": 60
+      },
+      "bass": {
+        "x": 0,
+        "y": 420
+      },
+      "keys": {
+        "x": 320,
+        "y": 0
+      },
+      "pad": {
+        "x": 320,
+        "y": 230
+      },
+      "sub": {
+        "x": 320,
+        "y": 610
+      },
+      "drums": {
+        "x": 320,
+        "y": 790
+      },
+      "verb": {
+        "x": 640,
+        "y": 150
+      },
+      "master": {
+        "x": 900,
+        "y": 380
+      }
+    }
+  },
+  "states": {}
+}
