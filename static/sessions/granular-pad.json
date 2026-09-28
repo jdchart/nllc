@@ -30,24 +30,50 @@
     "  /bloom pattern=tidal        a different progression from the same pack",
     "  /bloom variation=0.7        revoice it harder",
     "",
-    "density is the CPU knob: every grain is three nodes, and a note schedules",
-    "all of them up front. 20-40 is a pad; 200 is a stress test.",
+    "density is the CPU knob: every grain is a buffer source plus a gain, and",
+    "a cloud is placed a lookahead window at a time. 20-40 is a pad; 200 is a",
+    "stress test, and above ~40 grains sounding at once the cloud thins itself.",
     "",
     "The sources are picked at random on a fresh /add_track synth=granular, but",
     "a saved session stores the file it landed on — so this one sounds the same",
     "every time you open it. Note the two larger recordings take a moment to",
     "arrive; a note before then is silent rather than queued."
   ],
-  "clock": {"bpm": 60, "loopLengthBeats": 16},
-  "harmony": {"root": 60, "scale": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]},
+  "clock": {
+    "bpm": 60,
+    "loopLengthBeats": 16
+  },
+  "harmony": {
+    "root": 60,
+    "scale": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
   "master": {
-    "params": {"gain": 0.9, "pan": 0},
+    "params": {
+      "gain": 0.9,
+      "pan": 0
+    },
     "processors": [
       {
         "type": "goodenizer",
         "name": "glue",
         "active": true,
-        "options": {"character": "soft", "oversample": "2x"},
+        "options": {
+          "character": "soft",
+          "oversample": "2x"
+        },
         "params": {
           "threshold": -24,
           "ratio": 2.5,
@@ -66,26 +92,51 @@
   "buses": [
     {
       "name": "verb",
-      "params": {"gain": 0.85, "pan": 0},
+      "params": {
+        "gain": 0.85,
+        "pan": 0
+      },
       "processors": [
         {
           "type": "reverb",
           "name": "hall",
           "active": true,
-          "options": {"duration": 6, "decay": 3},
-          "params": {"wet": 1}
+          "options": {
+            "duration": 6,
+            "decay": 3
+          },
+          "params": {
+            "wet": 1
+          }
         }
       ],
-      "sends": [{"destName": "master", "gain": 1}]
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ]
     }
   ],
   "tracks": [
     {
       "name": "pad",
       "active": true,
-      "params": {"gain": 0.6, "pan": -0.1},
+      "params": {
+        "gain": 0.6,
+        "pan": -0.1
+      },
       "processors": [],
-      "sends": [{"destName": "master", "gain": 1}, {"destName": "verb", "gain": 0.5}],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "verb",
+          "gain": 0.5
+        }
+      ],
       "synth": {
         "type": "granular",
         "options": {
@@ -112,9 +163,21 @@
     {
       "name": "air",
       "active": true,
-      "params": {"gain": 0.42, "pan": 0.1},
+      "params": {
+        "gain": 0.42,
+        "pan": 0.1
+      },
       "processors": [],
-      "sends": [{"destName": "master", "gain": 1}, {"destName": "verb", "gain": 0.7}],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "verb",
+          "gain": 0.7
+        }
+      ],
       "synth": {
         "type": "granular",
         "options": {
@@ -141,9 +204,21 @@
     {
       "name": "shimmer",
       "active": true,
-      "params": {"gain": 0.3, "pan": 0.2},
+      "params": {
+        "gain": 0.3,
+        "pan": 0.2
+      },
       "processors": [],
-      "sends": [{"destName": "master", "gain": 1}, {"destName": "verb", "gain": 0.6}],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "verb",
+          "gain": 0.6
+        }
+      ],
       "synth": {
         "type": "granular",
         "options": {
@@ -182,7 +257,10 @@
         "transpose": 0,
         "per_category": 4
       },
-      "params": {"velocity": 0.9, "swing": 0}
+      "params": {
+        "velocity": 0.9,
+        "swing": 0
+      }
     },
     {
       "type": "patternvariator",
@@ -197,7 +275,10 @@
         "transpose": 0,
         "per_category": 4
       },
-      "params": {"velocity": 0.85, "swing": 0}
+      "params": {
+        "velocity": 0.85,
+        "swing": 0
+      }
     },
     {
       "type": "patternvariator",
@@ -212,17 +293,58 @@
         "transpose": 0,
         "per_category": 4
       },
-      "params": {"velocity": 0.7, "swing": 0}
+      "params": {
+        "velocity": 0.7,
+        "swing": 0
+      }
     },
-    {"type": "lfo", "name": "tide", "options": {"waveform": "sine"}, "params": {"freq": 0.03}},
-    {"type": "lfo", "name": "swell", "options": {"waveform": "triangle"}, "params": {"freq": 0.019}}
+    {
+      "type": "lfo",
+      "name": "tide",
+      "options": {
+        "waveform": "sine"
+      },
+      "params": {
+        "freq": 0.03
+      }
+    },
+    {
+      "type": "lfo",
+      "name": "swell",
+      "options": {
+        "waveform": "triangle"
+      },
+      "params": {
+        "freq": 0.019
+      }
+    }
   ],
   "patches": [
-    {"sourceName": "bloom", "destName": "pad.notes", "depth": 0},
-    {"sourceName": "drone", "destName": "air.notes", "depth": 0},
-    {"sourceName": "sparkle", "destName": "shimmer.notes", "depth": 0},
-    {"sourceName": "tide", "destName": "hall.wet", "depth": 0.3},
-    {"sourceName": "swell", "destName": "shimmer.gain", "depth": 0.12}
+    {
+      "sourceName": "bloom",
+      "destName": "pad.notes",
+      "depth": 0
+    },
+    {
+      "sourceName": "drone",
+      "destName": "air.notes",
+      "depth": 0
+    },
+    {
+      "sourceName": "sparkle",
+      "destName": "shimmer.notes",
+      "depth": 0
+    },
+    {
+      "sourceName": "tide",
+      "destName": "hall.wet",
+      "depth": 0.3
+    },
+    {
+      "sourceName": "swell",
+      "destName": "shimmer.gain",
+      "depth": 0.12
+    }
   ],
   "states": {}
 }

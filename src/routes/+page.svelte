@@ -19,6 +19,52 @@
     const LATENCY_KEY = "nllc:audioLatencyHint";
     const DEVICE_KEY = "nllc:audioOutputDeviceId";
 
+    // Which model /llm talks to. Stored the same way as the audio prefs and
+    // read per question by SessionPage's LlmSession, so a change here applies
+    // to the next question rather than the next page load. The value is a
+    // qualified id, "<provider>:<model>" — see $lib/server/llm/index.js.
+    const LLM_KEY = "nllc:llmModel";
+
+    let llmModel = $state("");
+    let llmProviders = $state([]);
+    let llmLoading = $state(true);
+    let llmError = $state("");
+    let llmWarning = $state("");
+
+    function setLlmModel(value) {
+        llmModel = value;
+        localStorage.setItem(LLM_KEY, value);
+    };
+
+    // The list is a *server* route for the same reason the session list is:
+    // neither a local daemon's model list nor a binary on PATH is reachable
+    // from a browser. Each provider reports its own error, so Ollama being
+    // stopped doesn't hide the Claude models (or vice versa).
+    async function loadModels() {
+        llmLoading = true;
+        try {
+            const response = await fetch("/api/llm/models");
+            if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+
+            ({ providers: llmProviders } = await response.json());
+            llmError = "";
+
+            const available = llmProviders.flatMap((provider) => provider.models.map((model) => model.id));
+            // Only auto-pick when nothing is chosen yet — a saved choice that
+            // has gone missing is warned about rather than silently replaced,
+            // since the usual cause is a daemon that's temporarily down and
+            // quietly switching models under someone is worse than a message.
+            if (!llmModel && available.length) setLlmModel(available[0]);
+            llmWarning = llmModel && !available.includes(llmModel)
+                ? `"${llmModel}" isn't available right now — /llm will fail until it's back, or pick another.`
+                : "";
+        } catch (error) {
+            llmError = `Couldn't load the model list — ${error.message}`;
+        } finally {
+            llmLoading = false;
+        }
+    };
+
     let latencyHint = $state("interactive");
     let outputDeviceId = $state("");
     let outputDevices = $state([]);
@@ -66,6 +112,9 @@
         sinkIdSupported = typeof AudioContext !== "undefined" && typeof AudioContext.prototype.setSinkId === "function";
         devicesSupported = !!navigator.mediaDevices?.enumerateDevices;
         if (devicesSupported) refreshDevices();
+
+        llmModel = localStorage.getItem(LLM_KEY) || "";
+        loadModels();
     });
 </script>
 
@@ -102,6 +151,46 @@
             {/if}
         </div>
     </div>
+
+    <section class="audio-options">
+        <h2>Language model</h2>
+        <p class="hint">Answers <code>/llm your question</code> in the console. Local models come from Ollama;
+            Claude runs through the <code>claude</code> CLI on your own subscription — no API key involved.</p>
+
+        <label class="field">
+            <span>Model</span>
+            {#if llmLoading}
+                <span class="unsupported">Looking for models…</span>
+            {:else}
+                <select value={llmModel} onchange={(e) => setLlmModel(e.target.value)} aria-label="Model for /llm">
+                    <option value="">None — /llm disabled</option>
+                    {#each llmProviders as provider (provider.provider)}
+                        {#if provider.models.length}
+                            <optgroup label={provider.label}>
+                                {#each provider.models as model (model.id)}
+                                    <option value={model.id}>{model.label}{model.detail ? ` · ${model.detail}` : ""}</option>
+                                {/each}
+                            </optgroup>
+                        {/if}
+                    {/each}
+                </select>
+            {/if}
+        </label>
+
+        <!-- A provider that isn't reachable says so rather than just being
+             absent — "Ollama isn't running" is a fixable problem, an empty
+             dropdown is a mystery. -->
+        {#each llmProviders as provider (provider.provider)}
+            {#if provider.error}
+                <p class="unsupported">{provider.label}: {provider.error}</p>
+            {/if}
+        {/each}
+
+        {#if llmWarning}<p class="unsupported">{llmWarning}</p>{/if}
+        {#if llmError}<p class="unsupported">{llmError}</p>{/if}
+
+        <button class="reveal" onclick={loadModels} disabled={llmLoading}>Refresh models</button>
+    </section>
 
     <section class="audio-options">
         <h2>Audio options</h2>
@@ -291,5 +380,27 @@
     .reveal:hover {
         color: var(--nllc-text);
         border-color: var(--nllc-accent);
+    }
+
+    .reveal:disabled {
+        opacity: 0.5;
+        cursor: default;
+    }
+
+    /* Provider groups in the model dropdown. Native optgroup labels render
+       as the platform's own italic grey, which is illegible on a dark panel
+       in some browsers — pin both explicitly. */
+    .field select optgroup {
+        background: var(--nllc-bg);
+        color: var(--nllc-text-dim);
+    }
+
+    .field select option {
+        color: var(--nllc-text);
+    }
+
+    .hint code {
+        font-family: var(--nllc-font-mono);
+        color: var(--nllc-text);
     }
 </style>

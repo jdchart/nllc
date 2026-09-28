@@ -25,7 +25,8 @@ audio-options panel.
 
 - **`/`** — homepage: a link to a blank session, a **dropdown of every saved
   session** in `static/sessions/` (each with a one-line summary of what it
-  contains), and the **audio options** panel (see below).
+  contains), the **language model** panel (see below) and the **audio options**
+  panel (see below).
 - **`/code-editor`** — a **blank session**: nothing but the master channel.
 - **`/code-editor/<name>`** — the same page, auto-loading
   `static/sessions/<name>.json` on open. Twelve ship:
@@ -146,6 +147,81 @@ that a download had something in it. Typing the commands gets you `at=beat` /
 `at=cycle`, which the buttons can't offer: `/record at=cycle` … `/stop_record
 at=cycle` gives a take that is a whole number of loops long. Full reference in
 [Recording](../../../ribbit/docs/user/commands.md#recording).
+
+## The assistant (`/llm`)
+
+Type `/llm` and a question into the console and an LLM answers it in the
+scrollback, streaming as it goes:
+
+    /llm what's the difference between svf and comb?
+    /llm the pad is too bright — what should I change?
+
+It knows what's in your session: every question carries a snapshot of the live
+graph — tracks, buses, processors, modulators, patches, and their current
+values — so `/llm which of my tracks are muted?` works. It **can't run
+anything**; it tells you the command and you type it.
+
+Engine commands never wait behind a question. Ask something slow and
+`/kick stop` still fires instantly.
+
+### Picking a model
+
+The homepage's **language model** panel lists everything available, grouped:
+
+- **Ollama (local)** — whatever `ollama list` shows on your machine. Free, and
+  usually answers in under a second.
+- **Claude Code (subscription)** — `sonnet`, `opus`, `haiku`, run through the
+  `claude` CLI. No API key: it uses whatever account you're logged into Claude
+  Code with, and draws on that subscription's usage like any other Claude Code
+  work. A few seconds slower to start, since it spawns a process per question.
+
+A provider that isn't reachable says why (Ollama not running, `claude` not on
+`PATH`) instead of just being absent. **Refresh models** re-checks — click it
+after an `ollama pull`. Changing the model takes effect on the next question;
+it also **clears the conversation**, since the transcript belongs to the model
+that was holding it.
+
+### Sub-commands
+
+| | |
+|---|---|
+| `/llm --status` | which model, how much is remembered, what's queued |
+| `/llm --context` | the prompt budget: every context file, its size, the total |
+| `/llm --reset` | forget the conversation (kept: 8 turns) |
+| `/llm --stop` | cancel what's running and drop the queue |
+| `/llm --bare <q>` | ask without the session snapshot |
+
+Ask again while one is running and it **queues** (up to four) rather than being
+refused — the line says `queued — 1 ahead`, and the bar above the input shows
+elapsed time and depth.
+
+### Teaching it — `static/context/`
+
+Every `.md` file in `nllc/static/context/` is injected into the assistant's
+system prompt, on every question, in filename order. **Edit a file, ask the next
+question, it's in effect** — no restart.
+
+| File | |
+|---|---|
+| `00-role.md` | who it is, how it should answer |
+| `10-ribbit.md` | the object model and command grammar |
+| `20-types.md` | every synth, processor and modulator |
+| `30-examples.md` | worked examples |
+| `40-house-rules.md` | **yours** — start here |
+
+`40-house-rules.md` is the one to reach for: your tempo and key preferences,
+naming conventions, "always route new tracks through `glue`", "give me two
+options, never three". One line per rule beats a paragraph.
+
+Adding `50-anything.md` works too — the folder is flat and everything in it is
+injected. `README.md` is skipped (it documents the folder), as is any file
+starting with `_`, which is how you park one without deleting it.
+
+Watch the cost with `/llm --context`. The five shipped files come to about 3.4k
+tokens, and that's paid on every single question — so keep entries terse, and
+delete what the model demonstrably doesn't need. Since `static/` is served, you
+can also read what the model reads at
+<http://localhost:5173/context/10-ribbit.md>.
 
 ## Audio options
 

@@ -10,8 +10,16 @@
     import CodeEditor from "$lib/components/code-editor/CodeEditor.svelte";
     import Mixer from "$lib/components/mixer/Mixer.svelte";
     import CollapsedRail from "$lib/components/mixer/CollapsedRail.svelte";
-    import { Ribbit, createCommandRouter, loadSession } from "ribbit";
+    import { Ribbit, createCommandRouter, loadSession, RESERVED_NAMES } from "ribbit";
     import { beginDrag } from "$lib/scripts/drag.js";
+    import { LlmSession, parseLlmCommand, formatMeta, describeContext, LLM_MODEL_KEY } from "$lib/scripts/llm.js";
+
+    // `/llm` is this app's command, not the engine's, so the engine's own
+    // guard against an object shadowing a command name doesn't know about it.
+    // Adding it here means /add_track name=llm renames itself the same way it
+    // would for /add_track — without it, a track called `llm` would sit
+    // permanently unaddressable behind the dispatcher below.
+    RESERVED_NAMES.add("llm");
 
     let { sessionUrl = null, title = "NLLC // Session" } = $props();
 
@@ -20,10 +28,111 @@
     let buses = $state([]);
     let modulators = $state([]);
     let patches = $state([]);
-    let executeCommand = $state((text) => `unrecognized: "${text}" (engine not ready yet)`);
-    let suggest = $state(() => null);
+    let engineExecute = $state((text) => `unrecognized: "${text}" (engine not ready yet)`);
+    let engineSuggest = $state(() => null);
     let sessionError = $state("");
     let codeEditor;
+    let llm = null;
+
+    // ── The /llm command ────────────────────────────────────────────────
+    // Intercepted here rather than registered with createCommandRouter,
+    // because the engine's router is the wrong shape for prose: it splits a
+    // submitted line at every "/" it finds and parses the rest as key=value
+    // pairs. `/llm how do I sidechain the pad?` would be torn into fragments
+    // before any handler saw it. Dispatching first also keeps engine commands
+    // out of the LLM queue — `/kick stop` must never wait behind a question.
+
+    function dispatch(text) {
+        const command = parseLlmCommand(text);
+        return command ? handleLlm(command) : engineExecute(text);
+    };
+
+    function dispatchSuggest(input, cursorPos) {
+        // Past `/llm `, the line is a sentence. Completing a word in it would
+        // be wrong on its own terms, and actively destructive here: the
+        // console accepts *and submits* ghost text on Enter, so a question
+        // mentioning "/reverb" would submit something else entirely.
+        if (input.trimStart().startsWith("/llm ")) return null;
+
+        // The engine gets first refusal, so `/l` still completes to
+        // `/load_session` rather than being shadowed by this.
+        const engineMatch = engineSuggest(input, cursorPos);
+        if (engineMatch) return engineMatch;
+
+        const trimmed = input.trim();
+        if (cursorPos === input.length && trimmed.length > 1 && trimmed !== "/llm" && "/llm".startsWith(trimmed)) {
+            return { start: input.indexOf("/") + 1, end: cursorPos, full: "llm" };
+        }
+        return null;
+    };
+
+    async function handleLlm({ action, question }) {
+        if (action === "reset") return llm.reset();
+        if (action === "stop") { const result = llm.stop(); tick(); return result; }
+        if (action === "context") return describeContext(nllc_instance).catch((error) => error.message);
+        if (action === "status" || !question) return llm.status();
+
+        const stream = codeEditor.beginStream();
+        const startedAt = Date.now();
+        let label = "";
+        let streaming = false;
+
+        stream.note("thinking…");
+        startTicker();
+
+        try {
+            const { meta } = await llm.ask(question, {
+                onQueued: (position) => stream.note(`queued — ${position} ahead`),
+                onStart: ({ provider, model }) => { label = `${provider}:${model}`; stream.note(`${label} · thinking…`); },
+                // A thinking model's scratchpad is never printed — it's the
+                // model's working, not its answer. It's only used as proof of
+                // life while nothing else is arriving.
+                onReasoning: () => { if (!streaming) stream.note(`${label} · reasoning…`); },
+                // First token clears the "thinking…" note — from here on the
+                // arriving text is its own evidence that something is happening.
+                onDelta: (text) => {
+                    if (!streaming) { streaming = true; stream.note(""); }
+                    stream.push(text);
+                },
+            }, { withContext: action !== "bare" });
+
+            stream.finish(formatMeta(meta) || `${label} · ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+        } catch (error) {
+            stream.fail(error.message);
+        } finally {
+            tick();
+        }
+
+        // The answer is already in the scrollback as a streamed line, so
+        // there's nothing for the console to log on top of it.
+        return "";
+    };
+
+    // The input row's working indicator, driven while anything is in flight.
+    // Polled rather than event-driven because the useful part is the elapsed
+    // second count, which nothing but the clock can report.
+    let statusTimer = null;
+    let workStartedAt = 0;
+
+    function tick() {
+        if (!llm || (!llm.busy && llm.queue.length === 0)) {
+            clearInterval(statusTimer);
+            statusTimer = null;
+            workStartedAt = 0;
+            codeEditor?.setStatus("");
+            return;
+        }
+        const elapsed = ((Date.now() - workStartedAt) / 1000).toFixed(1);
+        const queued = llm.queue.length;
+        codeEditor?.setStatus(`⋯ llm working — ${elapsed}s${queued ? ` · ${queued} queued` : ""} · /llm --stop to cancel`);
+    };
+
+    function startTicker() {
+        if (!workStartedAt) workStartedAt = Date.now();
+        if (statusTimer) return;
+        statusTimer = setInterval(tick, 200);
+        tick();
+    };
 
     // Passed down through Mixer to every clickable name/param label
     // (MixerChannel, ModulatorStrip) so clicking one pastes it into the
@@ -94,7 +203,18 @@
         nllc.onMessage = (text, kind) => codeEditor?.appendOutput(text, kind);
 
         nllc_instance = nllc;
-        ({ executeCommand, suggest } = createCommandRouter(nllc));
+        const router = createCommandRouter(nllc);
+        engineExecute = router.executeCommand;
+        engineSuggest = router.suggest;
+
+        // The natural-language layer. The model is read per turn from
+        // localStorage (written by the homepage dropdown) rather than
+        // captured here, so changing the selection takes effect on the next
+        // question instead of on the next page load.
+        llm = new LlmSession({
+            engine: nllc,
+            getModel: () => localStorage.getItem(LLM_MODEL_KEY) || "",
+        });
 
         // Dev-only debug handle. The console's text output is the whole
         // verification surface for engine work (see .claude/skills/run), and
@@ -103,6 +223,11 @@
         // without inventing a console command whose only user is the test.
         // Guarded by import.meta.env.DEV, so it never ships in a build.
         if (import.meta.env.DEV) window.nllc = nllc;
+        // Same seam, same reason, for the LLM layer: queue depth, remembered
+        // history and the provider-side conversation id have no console text
+        // form beyond the summary `/llm --status` prints, and a smoke test
+        // needs to see them directly. Dev-only, like the handle above.
+        if (import.meta.env.DEV) window.nllcLlm = llm;
 
         if (sessionUrl) {
             // A URL segment that doesn't match a real file is now reachable by
@@ -152,6 +277,11 @@
         // torn down explicitly or the session keeps playing on the next page.
         return () => {
             cancelAnimationFrame(rafId);
+            // An in-flight question outlives this component the same way the
+            // AudioContext does — it's a fetch the browser is holding open
+            // (and, for the claude provider, a child process on the far end).
+            clearInterval(statusTimer);
+            llm?.stop();
             nllc.dispose();
         };
     });
@@ -170,7 +300,7 @@
 
 <div class="layout">
     <div class="console-pane">
-        <CodeEditor bind:this={codeEditor} onCommand={executeCommand} onSuggest={suggest} />
+        <CodeEditor bind:this={codeEditor} onCommand={dispatch} onSuggest={dispatchSuggest} />
     </div>
 
     <div

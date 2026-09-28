@@ -2,8 +2,8 @@
 
 NLLC is a SvelteKit app that is a thin **interface** over the
 [`ribbit`](../../../ribbit/) engine. The engine owns all audio state and logic;
-the app owns the console, the mixer, page routing, audio-options prefs, and (in
-future) the natural-language layer. If you're changing engine behavior, you want
+the app owns the console, the mixer, page routing, audio-options prefs, and the
+natural-language layer. If you're changing engine behavior, you want
 the [ribbit dev docs](../../../ribbit/docs/dev/), not this file.
 
 ## Dependency wiring
@@ -27,11 +27,13 @@ Everything that touches the engine lives in **one** file:
    applying the saved output device.
 2. Builds the command router: `const { executeCommand, suggest } =
    createCommandRouter(engine)`, and hands those to the console. Also assigns
-   `window.nllc = engine` under `import.meta.env.DEV` — a debug handle that
-   never ships in a build. Some engine state has no text form the console
-   could print (a param's *modulated* value, a node's connections), and this
-   is how a smoke test reaches it without inventing a console command whose
-   only user is the test. See `.claude/skills/run`'s `js:` directive.
+   `window.nllc = engine` and `window.nllcLlm = llm` under
+   `import.meta.env.DEV` — debug handles that never ship in a build. Some
+   state has no text form the console could print (a param's *modulated*
+   value, a node's connections; the LLM queue's depth or its provider-side
+   conversation id), and this is how a smoke test reaches it without inventing
+   a console command whose only user is the test. See `.claude/skills/run`'s
+   `js:` directive.
 3. When given a `sessionUrl`, `fetch`es that JSON and calls
    `loadSession(engine, json)` — reporting a failed fetch/parse in a banner
    rather than silently leaving an empty session.
@@ -55,9 +57,14 @@ derived data) as props and call its methods.
 
 ## Routes (`src/routes/`)
 
-- `+page.svelte` — homepage: links + the audio-options panel. Writes prefs to
-  `localStorage` (`nllc:audioLatencyHint`, `nllc:audioOutputDeviceId`); it never
-  constructs an engine itself, just remembers prefs for the session pages.
+- `+page.svelte` — homepage: links, the language-model panel, and the
+  audio-options panel. Writes prefs to `localStorage` (`nllc:audioLatencyHint`,
+  `nllc:audioOutputDeviceId`, `nllc:llmModel`); it never constructs an engine
+  itself, just remembers prefs for the session pages. The model dropdown is
+  filled from `api/llm/models` and auto-picks the first available model only
+  when nothing is chosen yet — a *saved* choice that has gone missing is warned
+  about rather than silently replaced, since the usual cause is a daemon that's
+  temporarily down.
 - `code-editor/+page.svelte` — `<SessionPage />`, a blank session.
 - `code-editor/[session]/+page.svelte` — `<SessionPage
   sessionUrl="/sessions/{slug}.json" />`, the slug coming straight from the URL
@@ -99,6 +106,11 @@ derived data) as props and call its methods.
   the four drum categories. A pack containing no `.json` is omitted entirely
   rather than offered as an empty choice, so `pack=random` can never land
   somewhere with nothing to play. Same shadowing caveat as above.
+- `api/llm/{models,context,chat}/+server.js` — the natural-language layer's
+  server side. `models` and `context` are plain `GET`s; `chat` is a streaming
+  `POST`. Unlike the two manifest routes above, these serve *this app*, not a
+  contract the engine defines — the engine knows nothing about them. See the
+  natural-language layer section below.
 
 ## Components
 
@@ -154,13 +166,107 @@ derived data) as props and call its methods.
   can't be extended by the drag either. Returns the cleanup to call on
   pointerup. Note it also suppresses the click's default focus, so a drag
   target that should stay focusable refocuses itself (see the pan dial).
+- `llm.js` — `LlmSession` (conversation state, queue, the `/llm` grammar) plus
+  `parseLlmCommand`, `describeContext` and `formatMeta`. See the
+  natural-language layer below. Replaced the old `ollama.js` stub, and is named
+  for what it now is: a model is `"<provider>:<model>"`, and Ollama is only the
+  local one.
+- `llm-context.js` — `describeSession(engine)` and `buildUserTurn`, the
+  volatile half of the prompt. The static half lives in `static/context/`.
 
-## Natural-language layer (future)
+## Natural-language layer
 
-`src/lib/scripts/ollama.js` is a stub (`Ollama`) — NLLC's reason for being. The
-intended integration point for translating free text into ribbit slash-commands
-(the vocabulary `createCommandRouter` exposes) via a local Ollama model. Not yet
-wired to anything.
+NLLC's reason for being, and the one part that stays in the app rather than the
+engine. Today it answers questions (`/llm <question>`); the eventual job is
+translating free text into the slash-commands `createCommandRouter` exposes.
+
+### Why any of it is server-side
+
+`src/lib/server/llm/` and `src/routes/api/llm/` exist for one hard reason: the
+`claude` provider spawns a process, which a browser cannot do. Ollama alone
+*could* be called straight from the page, but then the client would branch on
+provider, and browser→Ollama depends on that machine's `OLLAMA_ORIGINS` rather
+than on anything this app controls. One server shape for both avoids both.
+
+### Providers
+
+A provider is a module in `src/lib/server/llm/` exporting `id`, `label`,
+`listModels()` and `chat(request)` — an async generator of
+`{type: "delta" | "reasoning" | "done"}`. `index.js` is the registry; a model is
+addressed as a qualified id, `"<provider>:<model>"`, split on the **first**
+colon because Ollama's own names contain one (`qwen3.6:27b`).
+
+| | `ollama.js` | `claude.js` |
+|---|---|---|
+| transport | HTTP to `OLLAMA_HOST` | spawns `claude -p` |
+| memory | resends a `history` array | `--session-id` / `--resume`; the CLI owns the transcript |
+| structured output | `format` (JSON schema) | `--json-schema` |
+| auth | none | the CLI's own — with no `ANTHROPIC_API_KEY` set it uses the logged-in subscription (`apiKeySource: "none"`) |
+
+Each provider honours what it can of the request and ignores the rest, which is
+why `conversationId` and `history` coexist. `claude.js` runs with `--tools ""`
+and a scratch cwd: a music-console assistant has no business reading the
+filesystem or discovering this repo's `CLAUDE.md`.
+
+`listAllModels()` returns one group per provider, **each carrying its own
+error** — Ollama being stopped must not empty the dropdown of Claude models.
+
+### Routes and the wire format
+
+- `api/llm/models` — the homepage dropdown.
+- `api/llm/context` — what `/llm --context` reports.
+- `api/llm/chat` — one turn, streamed as **NDJSON** (`start`, `reasoning`,
+  `delta`, `done`, `error`, one JSON object per line). NDJSON rather than SSE
+  because the client is a `fetch` reader — `EventSource` can't POST a body.
+  Errors after the first byte arrive as an `error` *line*, since the response is
+  already committed; only request validation gets a real 4xx.
+
+### The prompt has two halves
+
+The split is by how often each changes, which decides where each lives:
+
+| | Built by | Changes | Sent as |
+|---|---|---|---|
+| static | `server/llm/context.js`, from `static/context/*.md` | when you edit a file | system prompt |
+| volatile | `scripts/llm-context.js`, from the live engine | every question | `<session-state>` block on the user turn |
+
+Keeping live state **out** of the system prompt is load-bearing twice over: it
+leaves the static prefix byte-identical so a provider can cache it, and Claude's
+CLI fixes a session's system prompt at creation time while `--resume` carries
+the conversation past it.
+
+`describeSession()` renders the graph as compact text rather than the raw
+session JSON — same information at roughly 40% of the tokens, built from
+`snapshotSession()` so it can't drift from what `/save_session` writes.
+
+Context files are re-read **per request**, not cached. They're a few kB in front
+of a call that takes seconds, and the payoff is that editing a rule and re-asking
+picks it up with no restart.
+
+### Client (`scripts/llm.js`)
+
+`LlmSession` owns conversation state and a **queue**. Requests queue rather than
+being rejected (a queued question is still one you meant to ask), capped at four.
+Engine commands never queue — `SessionPage.dispatch` sends `/llm` here and
+everything else straight to the engine router, so `/kick stop` never waits behind
+a question.
+
+Switching model mid-conversation **clears the transcript**: a provider-side
+conversation id belongs to the provider that issued it, and half-carrying history
+across a switch produces a model confidently answering about a conversation it
+never had.
+
+### Why `/llm` isn't an engine command
+
+`createCommandRouter` splits a submitted line at every `/` and parses the rest as
+`key=value` pairs — correct for commands, fatal for prose. `/llm how do I
+sidechain the pad?` would be shredded before any handler saw it. So
+`parseLlmCommand` intercepts in `SessionPage` first. Two consequences handled
+there: `RESERVED_NAMES.add("llm")` keeps an object from being named `llm` and
+shadowed, and `dispatchSuggest` disables ghost-text completion once a line starts
+`/llm ` (the console accepts *and submits* ghost text on Enter, so completing
+`/rev` inside a question would submit something else). The engine still gets
+first refusal on every other completion, so `/l` remains `/load_session`.
 
 ## Static assets
 
@@ -214,6 +320,20 @@ synth, and of the CZ's DCW behaving like a filter that isn't one).
 
 All twelve carry a `goodenizer` insert named `glue` on master, tuned per
 session in the file's `master.processors`.
+
+`static/context/` holds the in-app assistant's system prompt as markdown —
+every `.md` in it is concatenated (filename order) into the prompt on every
+`/llm` question. Like patterns, it's *content the user is expected to edit*;
+unlike patterns, it's read **server-side** (`src/lib/server/llm/context.js`)
+rather than fetched over HTTP, so being under `static/` buys editability and the
+ability to read the model's own context at `/context/<file>.md`, not the
+serving. `README.md`, `_`-prefixed and dotfiles are skipped; five files ship
+(`00-role`, `10-ribbit`, `20-types`, `30-examples`, `40-house-rules`), about
+3.4k tokens all told. Two properties the other static folders don't have: every
+byte is a **fixed cost on every question** (`/llm --context` prints the budget),
+and `20-types.md` **restates the engine's type registry**, so it goes silently
+stale when a type is added or removed — see that folder's own `README.md`, and
+the step in `.claude/tasks/*_creation.md`.
 
 The files are stored **width-budget compacted** — short objects and arrays
 inlined, `readme` one line per element. Nothing reads the formatting, but they

@@ -11,9 +11,17 @@ for algorithmic pattern generation that runs alongside whatever you've
 authored by hand; one takes no patch at all and roams the session gliding
 parameters by itself. Channels have mute and solo, and a **group** lets one
 command drive several objects at once. Whatever you play can be recorded to
-WAV — master in stereo, or every track/bus/master as its own file. The
-long-term goal is to drive it with natural language
-instead of commands, via a local Ollama model.
+WAV — master in stereo, or every track/bus/master as its own file.
+
+An **LLM assistant** sits alongside the console: `/llm <question>` answers in
+the scrollback, streaming, with a snapshot of your live session in its prompt.
+It runs on a local Ollama model or on Claude through the `claude` CLI (your
+Claude Code subscription — no API key), picked from a dropdown on the homepage.
+How it behaves is yours to edit: every markdown file in
+[`static/context/`](static/context/) is injected into its system prompt, and an
+edit lands on the next question with no restart. Answering questions is step
+one; the long-term goal is to drive the whole thing with natural language
+instead of commands.
 
 NLLC is the **interface**; the audio engine lives in a separate package,
 [`ribbit`](../ribbit/) (a sibling in this workspace). NLLC is a SvelteKit
@@ -109,6 +117,20 @@ a hit, `.` a rest, and spaces are ignored so you can see the bar:
 
 Adding a `.json` (or a whole new pack folder) is the whole workflow. Full
 format reference: [ribbit/docs/user/patterns.md](../ribbit/docs/user/patterns.md).
+
+### Assistant context
+
+[`static/context/`](static/context/) holds the `/llm` assistant's system prompt
+as markdown. Every `.md` in it is concatenated into the prompt on **every**
+question, in filename order — five ship (`00-role`, `10-ribbit`, `20-types`,
+`30-examples`, `40-house-rules`), about 3.4k tokens. Read the folder's own
+[README](static/context/README.md) before editing.
+
+Like patterns, these are meant to be edited, and an edit lands on the next
+question with no restart. Unlike patterns, they're read *server-side* rather
+than fetched, and every byte is a fixed cost on every question — `/llm
+--context` prints the budget. `40-house-rules.md` is the one to start with:
+your naming conventions, defaults, and answer-style preferences.
 
 ## Building
 

@@ -14,6 +14,11 @@
     let logEl;
     let inputEl;
 
+    // What the input row reports while the LLM is working — model, elapsed
+    // time, queue depth. Set from outside via setStatus (see
+    // SessionPage.svelte); empty means idle and the row renders nothing.
+    let llmStatus = $state("");
+
     // Submitted commands, oldest first, for ArrowUp/ArrowDown recall (like a
     // shell history) — see handleKeydown. historyIndex counts back from the
     // end (-1 = not currently browsing, showing whatever's actually typed);
@@ -104,6 +109,46 @@
     export function appendOutput(text, kind = "deferred") {
         log.push({ type: kind === "readme" ? "readme" : "deferred", text });
         queueScroll();
+    };
+
+    // Opens a log line that fills in over time, for output that arrives as a
+    // stream rather than a return value — today that's only the LLM (see
+    // llm.js), whose answer lands token by token over seconds.
+    //
+    // Everything else here appends a finished string; this hands back a
+    // handle instead. The pushed object is a reactive proxy because `log` is
+    // deep $state, so mutating it through the handle re-renders that one line
+    // without touching the rest of the scrollback.
+    //
+    //   note()   dim suffix — "thinking…", then the model/timing summary
+    //   push()   append answer text
+    //   finish() clear the pending cursor, set the final note
+    //   fail()   same, but marked as an error
+    export function beginStream() {
+        const entry = log[log.push({ type: "llm", text: "", note: "", pending: true, failed: false }) - 1];
+        queueScroll();
+
+        return {
+            note: (text) => { entry.note = text; },
+            push: (text) => { entry.text += text; queueScroll(); },
+            finish: (note = "") => { entry.pending = false; entry.note = note; queueScroll(); },
+            fail: (message) => {
+                entry.pending = false;
+                entry.failed = true;
+                // A failure part-way through a streamed answer keeps what
+                // arrived — it's usually the most useful half of the report.
+                entry.note = entry.text ? message : "";
+                if (!entry.text) entry.text = message;
+                queueScroll();
+            },
+        };
+    };
+
+    // The input row's working indicator. Distinct from a log line: it says
+    // "the console is busy", survives across queued requests, and disappears
+    // when everything settles.
+    export function setStatus(text) {
+        llmStatus = text ?? "";
     };
 
     function recallHistory(direction) {
@@ -232,9 +277,16 @@
 <div class="console">
     <div class="log" bind:this={logEl}>
         {#each log as entry}
-            <div class="line {entry.type}">{entry.text}</div>
+            {#if entry.type === "llm"}
+                <div class="line llm" class:pending={entry.pending} class:failed={entry.failed}><span class="body">{entry.text}</span>{#if entry.note}<span class="note">{entry.note}</span>{/if}</div>
+            {:else}
+                <div class="line {entry.type}">{entry.text}</div>
+            {/if}
         {/each}
     </div>
+    {#if llmStatus}
+        <div class="status" aria-live="polite">{llmStatus}</div>
+    {/if}
     <div class="input-row">
         <span class="prompt">&gt;</span>
         <div class="input-wrap">
@@ -306,6 +358,56 @@
         border-left: 2px solid var(--nllc-accent);
         padding-left: 0.6rem;
         margin: 0.25rem 0 0.6rem;
+    }
+
+    /* A model's answer. Rule-set off like a readme (it's prose to be read,
+       not command output to be skimmed) but in the dim text colour, since
+       unlike a readme it's a reply to something you asked. The wrapper drops
+       pre-wrap so the markup's own newlines don't print; .body puts it back
+       for the answer text itself. */
+    .line.llm {
+        white-space: normal;
+        border-left: 2px solid var(--nllc-text-dim);
+        padding-left: 0.6rem;
+        margin: 0.25rem 0 0.6rem;
+    }
+
+    .line.llm .body {
+        white-space: pre-wrap;
+    }
+
+    .line.llm.failed {
+        border-left-color: var(--nllc-meter-hot);
+        color: var(--nllc-meter-hot);
+    }
+
+    /* Still streaming: a blinking block after whatever has arrived, which is
+       also the only thing on the line before the first token lands. */
+    .line.llm.pending .body::after {
+        content: "▍";
+        color: var(--nllc-accent);
+        animation: llm-blink 1s step-end infinite;
+    }
+
+    @keyframes llm-blink {
+        50% { opacity: 0; }
+    }
+
+    .line.llm .note {
+        display: block;
+        margin-top: 0.25rem;
+        font-size: 0.78rem;
+        color: var(--nllc-text-dim);
+        opacity: 0.8;
+    }
+
+    /* The working indicator, between scrollback and input. Present only while
+       something is in flight, so the row appearing at all is the signal. */
+    .status {
+        padding: 0.3rem 1rem;
+        border-top: 1px solid var(--nllc-border);
+        font-size: 0.78rem;
+        color: var(--nllc-accent);
     }
 
     .input-row {

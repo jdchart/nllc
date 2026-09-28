@@ -11,23 +11,31 @@ this file only covers the app.
 ```
 nllc/  (SvelteKit app)
 ├── src/routes/
-│   ├── +page.svelte                 homepage: blank-session link, session dropdown, audio options
+│   ├── +page.svelte                 homepage: blank-session link, session dropdown, model dropdown, audio options
 │   ├── +page.server.js              lists static/sessions/*.json for that dropdown
 │   ├── samples/manifest.json/+server.js   lists static/samples/ by category, for percsampler
 │   ├── patterns/manifest.json/+server.js  lists static/patterns/ by pack, for patternvariator
+│   ├── api/llm/{models,context}/+server.js  GET: provider models; context-folder budget
+│   ├── api/llm/chat/+server.js      POST: one LLM turn, streamed as NDJSON
 │   └── code-editor/
 │       ├── +page.svelte             blank session
 │       └── [session]/+page.svelte   auto-loads /sessions/<slug>.json
 ├── src/lib/components/
 │   ├── code-editor/SessionPage.svelte   ← THE integration point (see below)
-│   ├── code-editor/CodeEditor.svelte    console: input + scrollback + ghost-text + history
+│   ├── code-editor/CodeEditor.svelte    console: input + scrollback + ghost-text + history + beginStream()
 │   └── mixer/*.svelte                    live read/write view of the graph
 │                                          (Transport.svelte holds Recorder.svelte)
+├── src/lib/server/llm/              server-only: provider registry + context loader
+│   ├── index.js                     registry; "<provider>:<model>" ids
+│   ├── ollama.js                    HTTP to OLLAMA_HOST
+│   ├── claude.js                    spawns `claude -p` (subscription auth, no API key)
+│   └── context.js                   assembles the system prompt from static/context/*.md
 ├── src/lib/scripts/
-│   ├── ollama.js                    Ollama() stub — future NL→command layer
+│   ├── llm.js                       LlmSession: conversation state, queue, /llm grammar
+│   ├── llm-context.js               describeSession(): the live graph as compact text
 │   └── drag.js                      beginDrag(): shared pointer-drag selection suppression
-└── static/{samples,sessions,patterns}/   drums + foley at /samples; session JSON;
-                                          hand-written pattern packs at /patterns
+└── static/{samples,sessions,patterns,context}/   drums + foley at /samples; session JSON;
+                                          pattern packs at /patterns; assistant prompt at /context
 ```
 
 ## Engine integration (the one thing to know)
@@ -49,7 +57,9 @@ derived data) via props.
 
 Under `import.meta.env.DEV` only, it also assigns `window.nllc = engine` — a
 debug handle for reading engine state that has no console text form (a param's
-modulated value, a node's connections). Stripped from production builds.
+modulated value, a node's connections) — and `window.nllcLlm = llm`, the same
+seam for the LLM layer (queue depth, remembered history, the provider-side
+conversation id). Both stripped from production builds.
 
 It also sets `engine.onMessage = (text, kind) => codeEditor?.appendOutput(text,
 kind)` — the reverse direction, for output no command is waiting on. Two kinds
@@ -72,11 +82,51 @@ Homepage writes `localStorage` keys `nllc:audioLatencyHint` /
 (`latencyHint` must be passed at `AudioContext` creation; the output device
 `sinkId` can be applied any time after).
 
-## Known current state
+## Natural-language layer (`/llm`)
 
-- The natural-language layer (`ollama.js`) is an empty stub; no NL→command wiring
-  exists yet. It's the app's raison d'être and the one piece deliberately kept out
-  of the engine.
+The app's raison d'être, and the one piece deliberately kept out of the engine.
+It answers questions today; NL→command is the next step (the `format` field, a
+JSON schema both providers accept, is plumbed and unused, waiting for it).
+
+- **Two providers, one contract.** A module in `src/lib/server/llm/` exports
+  `id`, `label`, `listModels()`, and `chat(req)` — an async generator of
+  `{type: "delta"|"reasoning"|"done"}`. Models are `"<provider>:<model>"`, split
+  on the **first** colon (Ollama names contain one: `qwen3.6:27b`).
+  `ollama.js` resends a `history` array; `claude.js` spawns `claude -p` and
+  carries a `conversationId` instead, because its CLI owns the transcript. With
+  no `ANTHROPIC_API_KEY` set, the CLI authenticates as the logged-in
+  subscription — no API key exists anywhere in this app.
+- **Server-side because it has to be.** `claude.js` spawns a process. Ollama
+  alone could be called from the page, but one shape for both stops the client
+  branching on provider and removes any dependence on `OLLAMA_ORIGINS`.
+- **The prompt has two halves, split by rate of change.** Static: the markdown
+  in `static/context/`, assembled by `server/llm/context.js` into the system
+  prompt, byte-identical across turns so a provider can cache it. Volatile: the
+  live graph, rendered by `scripts/llm-context.js` as compact text (~40% of the
+  tokens of the equivalent JSON, built from `snapshotSession` so it can't
+  drift) and wrapped in a `<session-state>` block on the **user** turn. Keeping
+  it out of the system prompt preserves the cached prefix *and* works around
+  Claude's CLI fixing a session's system prompt at creation while `--resume`
+  carries on past it.
+- **`static/context/` is a flat, always-injected folder**, filename order,
+  re-read per request so an edit lands on the next question with no restart.
+  `README.md`, `_`-prefixed and dotfiles are skipped. `/llm --context` prints
+  the budget. **`20-types.md` restates the engine's type registry and goes
+  silently stale** when a type is added or removed — the coupling is handled at
+  workspace level (`.claude/tasks/*_creation.md`), never by the engine, which
+  must not know its host has a context folder.
+- **`/llm` is intercepted in `SessionPage`, not registered with the engine
+  router** — that router splits a line at every `/` and parses `key=value`
+  pairs, which shreds prose. Consequences handled there: `RESERVED_NAMES.add
+  ("llm")` stops an object shadowing it, and `dispatchSuggest` disables
+  ghost-text once a line starts `/llm ` (the console submits ghost text on
+  Enter) while still giving the engine first refusal elsewhere, so `/l` remains
+  `/load_session`.
+- **Requests queue** (cap 4), engine commands never do. Switching model clears
+  the conversation. `CodeEditor.beginStream()` returns a handle whose
+  `push`/`note`/`finish`/`fail` mutate one reactive log line as tokens arrive.
+
+## Known current state
 - The engine (`ribbit`) is where new synths/processors/modulators/commands are
   added — not here. See `ribbit/docs/dev/`.
 - `Recorder.svelte` (inside `Transport.svelte`) drives the engine's recorder
