@@ -41,7 +41,8 @@ Object creation is the one thing that refuses `at=`.
 ## Channel commands (tracks, buses, master)
 
 `gain=` `pan=` `mute`/`unmute` `solo`/`unsolo` `remove_self`
-`add_processor=<type>` `remove_processor=<name>`
+`add_processor=<type>` `remove_processor=<id>` `bypass=<id>`/`enable=<id>`
+(ids are `p1`, `p2`… — shown in the channel summary)
 
 Routing: `out=<name>` (replace all sends with one), `add_send=<name>`
 [`send_gain=`], `send=<id>` [`send_gain=`], `remove_send=<id>`. A new
