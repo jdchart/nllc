@@ -159,6 +159,26 @@ that a download had something in it. Typing the commands gets you `at=beat` /
 at=cycle` gives a take that is a whole number of loops long. Full reference in
 [Recording](../../../ribbit/docs/user/commands.md#recording).
 
+## The audio panel
+
+**audio ▾** in the Transport bar opens the whole audio setup (lilypad has the
+same panel in its toolbar). Every change runs as a console command.
+
+- **Output** — the output device (e.g. a Scarlett), its channel count,
+  latency, which hardware outputs master uses, and extra outputs
+  (**+ output** adds one on the next free pair; send to it with `out=` or
+  `add_send=`).
+- **Inputs** — each live audio input (`audioin` track): device, channels,
+  monitor on/off, and whether it's live; **+ audio input**. Each MIDI object:
+  device and MIDI channel (and control number for a `midicc`); **+ midi
+  keys**, **+ midi cc**.
+- **Record** — what to record (master, everything, or ticked sources), the
+  format (32-bit float, 24, 16) and the safety limit.
+
+The output device and latency chosen here are remembered in the browser
+(shared with lilypad and the homepage); a session file that names a device
+wins. See [The audio interface](../../../ribbit/docs/user/commands.md#the-audio-interface).
+
 ## The assistant (`/llm`)
 
 Type `/llm` and a question into the console and an LLM answers it in the
@@ -239,7 +259,7 @@ can also read what the model reads at
 The homepage has an **audio options** panel:
 
 - **Output device** — pick which audio output to play through (where the browser
-  supports `setSinkId`).
+  supports `setSinkId`). The session's **audio** panel can change it live.
 - **Latency** — `interactive` (lowest latency), `balanced`, or `playback` (fewest
   glitches).
 

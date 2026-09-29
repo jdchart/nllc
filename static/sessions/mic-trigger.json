@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "readme": [
+    "mic-trigger — clap, tap or sing into the mic; each onset plays a random",
+    "note of the scale. Four ordinary objects, each doing one thing:",
+    "",
+    "  mic (audioin track, monitor off)",
+    "    -> onset (loudness source=mic): fires when the level crosses threshold",
+    "    -> notes (randomnotes trigger=onset): one random degree per firing",
+    "    --notes--> pluck (karplus) --> verb --> master",
+    "  onset also strikes 'toss' (modlfo sh strike=onset) --> pluck.pan,",
+    "  so every hit lands somewhere new in the stereo field.",
+    "",
+    "The browser asks for the microphone once. Use headphones, or keep",
+    "/mic monitor=off (the default here) — the mic isn't heard, only analysed.",
+    "",
+    "Try:",
+    "  /start",
+    "  /onset threshold=-40         more sensitive (dBFS); -20 = only loud hits",
+    "  /onset hold=0.25             at most one firing per 0.25s",
+    "  /notes scale=0,2,4           which scale degrees it picks from",
+    "  /notes probability=0.5       skip half the hits",
+    "  /harmony root=55             retune everything it plays",
+    "  /mic monitor=on              hear the mic through the track (fx, sends)",
+    "  /mic device=scarlett channels=2   another input, e.g. interface input 2",
+    "  /onset mode=envelope         its signal outlet becomes the level itself —",
+    "                               patch it into any param to follow your voice",
+    "",
+    "Several outputs (e.g. a Scarlett with outs 3-4):",
+    "  /devices                     list devices",
+    "  /master device=scarlett      play through it",
+    "  /add_output name=phones channels=3,4",
+    "  /verb add_send=phones        the reverb on 3-4 too; /outputs lists routing"
+  ],
+  "clock": {"bpm": 110, "loopLengthBeats": 4},
+  "harmony": {"root": 57, "scale": [0, 2, 3, 5, 7, 8, 10]},
+  "master": {"params": {"gain": 0.85, "pan": 0}, "processors": []},
+  "buses": [
+    {
+      "name": "verb",
+      "params": {"gain": 0.6, "pan": 0},
+      "processors": [
+        {"type": "reverb", "name": "room", "active": true, "options": {"duration": 3, "decay": 3}, "params": {"wet": 1}}
+      ],
+      "sends": [{"destName": "master", "gain": 1}]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "mic",
+      "active": true,
+      "params": {"gain": 0.8, "pan": 0},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}],
+      "synth": {"type": "audioin", "options": {"device": "default", "channels": "1", "monitor": "off"}, "params": {"trim": 1}, "events": []}
+    },
+    {
+      "name": "pluck",
+      "active": true,
+      "params": {"gain": 0.8, "pan": 0},
+      "processors": [],
+      "sends": [{"destName": "master", "gain": 1}, {"destName": "verb", "gain": 0.5}],
+      "synth": {"type": "karplus", "options": {}, "params": {"damping": 0.25}, "events": []}
+    }
+  ],
+  "modulators": [
+    {"type": "loudness", "name": "onset", "options": {"source": "mic", "mode": "gate"}, "params": {"threshold": -30, "hold": 0.12, "release": 0.1, "width": 0.02}},
+    {"type": "randomnotes", "name": "notes", "options": {"scale": [0, 2, 4, 6, 7, 9], "trigger": "onset"}, "params": {"probability": 1, "min_gap": 1}},
+    {"type": "modlfo", "name": "toss", "options": {"shape": "sh", "sync": "off", "div": "1bar", "strike": "onset"}, "params": {"hz": 0.01}}
+  ],
+  "patches": [
+    {"sourceName": "notes", "destName": "pluck.notes"},
+    {"sourceName": "toss", "destName": "pluck.pan", "depth": 0.7}
+  ]
+}

@@ -18,6 +18,7 @@ Lists below are complete and verified against the live engine. Use
 | `granular` | one recording played as a cloud of overlapping grains. Sustained pads; plays chords. | `density` `grain_size` `spray` `position` `drift` `pitch_spread` `pan_spread` `attack` `release` | `sample` `folder` `window` `direction` `root` |
 | `tapepad` | detuned voices + a shared tape stage (saturation, crush, wow/flutter, hiss). Slow warped lofi chords. | `wow` `flutter` `wow_rate` `hiss` `sat` `cutoff` `detune` `pan_spread` `sub` `attack` `release` | `waveform` `voices` `bits` |
 | `chaossynth` | two cross-coupled feedback voices. A seed gives every MIDI note its own configuration — **a note picks a timbre, not a pitch**. | `a_cross` `a_drive` `a_pitch` `a_res` `a_track`, `b_` × the same five, `spread` `pitch_track` `attack` `release` | `seed` `output` |
+| `audioin` | live input (mic, interface inputs) as a track: effects, sends, and a `loudness` source. Ignores notes. `monitor=off` = analyse without hearing | `trim` | `device` (name fragment) `channels` (`1` or `1,2`) `monitor` |
 | `czsynth` | Casio CZ-101 phase distortion. 28 Boards of Canada tones ship as presets; `dcw` is the brightness knob. | `dcw` `env_time` `detune` `vib_depth` `vib_rate` `pitch_env` `key_follow` | `preset` `wave` `lines` `mod` `octave` |
 
 | `fmperc` | AE machine FM percussion: 2-op FM, separate amp/index envelopes (bells, wood, metal clicks) | `harm` `index` `a_dec` `i_dec` `curve` `drive` `fold` `down` `pitch` `keytrk` `n_tmbr` `level` | `lane` `sieve` `quant` |
@@ -75,15 +76,18 @@ Patch into a **parameter** (`dest=svf.cutoff`, needs `depth=`):
 |---|---|---|---|
 | `lfo` | continuous bipolar −1..1 signal at a given rate | `freq` | `waveform` |
 | `cv` | a single held value you set, ramp or automate — a manual offset / sample-and-hold | `value` | — |
-| `modlfo` | AE per-param modulator: sine/triangle/sawup/sawdown/square/sh/drift, synced (`div`) or free (`hz`); `sh` re-rolls on each hit of `strike=<track>` | `hz` | `shape` `sync` `div` `strike` |
-| `attractor` | chaotic source (coullet/lorenz/rossler) at audio rate; `strike=<track>` pushes its speed | `rate` `wander` | `system` `axis` `strike` |
+| `modlfo` | AE per-param modulator: sine/triangle/sawup/sawdown/square/sh/drift, synced (`div`) or free (`hz`); `sh` re-rolls each time `strike=<name>` fires (a track's note, a loudness onset, a key) | `hz` | `shape` `sync` `div` `strike` |
+| `attractor` | chaotic source (coullet/lorenz/rossler) at audio rate; `strike=<name>` pushes its speed | `rate` `wander` | `system` `axis` `strike` |
+| `loudness` | envelope follower on `source=<track/bus/master>` (e.g. an audioin): **fires** each time the level crosses `threshold` dBFS; output is a gate impulse or (`mode=envelope`) the level | `threshold` `hold` `release` `width` | `source` `mode` |
+| `midicc` | one MIDI knob/fader/pedal (`cc=0-127` or `pitchbend`) as 0..1; fires crossing the middle | `smooth` | `device` `channel` `cc` |
 | `curveloop` | AE shapes: a drawn curve looping on a musical length | `rate` `min` `max` `auto` `npoints` `jump` | `points` `div` `mult` `rnd` `clr` |
 
 Patch into a **track's notes** (`dest=<track>.notes`, no `depth=`):
 
 | Type | What it is | params | options |
 |---|---|---|---|
-| `randomnotes` | re-rolls continuously | `probability` `min_gap` | `scale` |
+| `randomnotes` | re-rolls continuously — or, with `trigger=<name>`, once each time that object fires (a loudness onset → a random scale note) | `probability` `min_gap` | `scale` `trigger` |
+| `midiin` | a MIDI keyboard: keys held until released, sustain pedal, velocity; its signal outlet is one `cc` (mod wheel) | `length` `release` `transpose` | `device` `channel` `cc` |
 | `markovpercs` | generates one fixed pattern and loops it until reseeded | `velocity` `swing` | `style` `seed` `steps` `step_beats` `density` `per_category` |
 | `euclidpercs` | euclidean rhythms | `velocity` `swing` `dropout` | `preset` `steps` `step_beats` `variation` `seed` `per_category`, and `<cat>`/`<cat>_rotate` for each of `kicks` `snares` `hats` `percs` |
 | `patternvariator` | loads a hand-written pattern from `/patterns` and transforms it | `velocity` `swing` | `pack` `pattern` `seed` `variation` `density` `step_beats` `transpose` `per_category` |
@@ -101,3 +105,11 @@ Needs **no patch** — acts on objects directly:
 | `terrarium` | AE Terrarium: Lorenz agents grab params anywhere, move them, give them back (`hold=on` keeps changes); can shuffle a markovseq | `rho` `wanderers` `depth` `speed` `hold_min` `hold_max` `grab` `scramble` `safety` `glide` `balance` `fx_wt` `sh` | `mode` `hold` `targets` `shuffle` `shuffle_cols` `coupled` `seed` `panic` `reset` |
 | `driftbank` | AE FX banks / pan drift: each target's send into `bus` (or pan) drifts on its own | `rate` `jump` `depth` | `kind` `bus` `targets` `mode` `seed` |
 | `fbmatrix` | AE feedback matrix: routes effect buses into each other (safe: zero diagonal, rows sum to 1, cutout) | `depth` `rot` `g` `drive` `hp` `damp` `dtime` `mute` `sec` | `buses` `auto` `dice` `seed` |
+
+## Hardware outputs — the audio interface
+
+`/devices` lists audio outputs/inputs and MIDI inputs. `/master device=<name fragment>`
+plays through another interface (e.g. `scarlett`); `/master channels=3,4` moves
+master's hardware outputs. `/add_output name=<n> channels=3,4` (or one channel, `5`)
+makes another destination: `/<track> out=<n>` or `add_send=<n>`. `/outputs` lists
+the routing; an output past the device's channel count is silent and says so.

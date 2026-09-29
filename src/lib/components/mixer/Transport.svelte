@@ -5,6 +5,7 @@
     // real /save_json /load_json handlers rather than duplicating the
     // download/file-picker logic here.
     import Recorder from "./Recorder.svelte";
+    import AudioPanel from "./AudioPanel.svelte";
 
     let { nllc, onRunCommand = () => {} } = $props();
 
@@ -78,6 +79,7 @@
     </div>
 
     <Recorder {nllc} {onRunCommand} />
+    <AudioPanel engine={nllc} onRun={onRunCommand} />
 
     <div class="session-io">
         <button class="io-button" onclick={() => onRunCommand("/save_json")} title="Download the whole session as a .json file">Save JSON</button>

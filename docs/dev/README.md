@@ -24,7 +24,8 @@ Everything that touches the engine lives in **one** file:
 
 1. Constructs one `Ribbit` instance **client-side only** (inside `onMount` —
    `AudioContext` doesn't exist during SSR), passing the saved `latencyHint` and
-   applying the saved output device.
+   applying the saved output device through `engine.hardware.setDevice` (not
+   bare `setSinkId`, so the device's channel count is picked up).
 2. Builds the command router: `const { executeCommand, suggest } =
    createCommandRouter(engine)`, and hands those to the console. Also assigns
    `window.nllc = engine` and `window.nllcLlm = llm` under

@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "readme": [
+    "midi-keys \u2014 a MIDI keyboard playing a plucked string.",
+    "",
+    "  keys (midiin) --notes--> pluck (karplus) --> verb --> master",
+    "  keys signal (mod wheel, cc 1) --> pluck.damping",
+    "  knob (midicc cc 74) --> verb.gain",
+    "",
+    "'keys' listens to every connected MIDI input (the browser asks for MIDI",
+    "permission once). Keys sound while held and let go on key-up; the sustain",
+    "pedal holds them. The mod wheel darkens the string, the cc 74 knob (often",
+    "labelled cutoff) rides the reverb. Notes only sound after /start.",
+    "",
+    "Try:",
+    "  /start",
+    "  /devices                     list MIDI inputs (and audio devices)",
+    "  /keys device=arturia         listen to one device (a fragment of its name)",
+    "  /keys channel=2              one MIDI channel (0 = all)",
+    "  /keys release=1              a slower fade on key-up",
+    "  /keys transpose=-12          an octave down",
+    "  /knob cc=71                  follow a different knob (or cc=pitchbend)",
+    "  /add_modulator type=midicc name=fader cc=7   one midicc per control",
+    "  /pluck synth=czsynth         any synth plays from the same cable",
+    "",
+    "A midiin also fires on every key, so modlfo strike=keys or",
+    "randomnotes trigger=keys follow the keyboard too."
+  ],
+  "clock": {
+    "bpm": 100,
+    "loopLengthBeats": 4
+  },
+  "harmony": {
+    "root": 60,
+    "scale": [
+      0,
+      2,
+      4,
+      5,
+      7,
+      9,
+      11
+    ]
+  },
+  "master": {
+    "params": {
+      "gain": 0.85,
+      "pan": 0
+    },
+    "processors": []
+  },
+  "buses": [
+    {
+      "name": "verb",
+      "params": {
+        "gain": 0.6,
+        "pan": 0
+      },
+      "processors": [
+        {
+          "type": "reverb",
+          "name": "room",
+          "active": true,
+          "options": {
+            "duration": 2.5,
+            "decay": 3
+          },
+          "params": {
+            "wet": 1
+          }
+        }
+      ],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "pluck",
+      "active": true,
+      "params": {
+        "gain": 0.8,
+        "pan": 0
+      },
+      "processors": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "verb",
+          "gain": 0.4
+        }
+      ],
+      "synth": {
+        "type": "karplus",
+        "options": {},
+        "params": {
+          "damping": 0.3
+        },
+        "events": []
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "midiin",
+      "name": "keys",
+      "options": {
+        "device": "any",
+        "channel": 0,
+        "cc": 1
+      },
+      "params": {
+        "length": 4,
+        "release": 0.3,
+        "transpose": 0
+      }
+    },
+    {
+      "type": "midicc",
+      "name": "knob",
+      "options": {
+        "device": "any",
+        "channel": 0,
+        "cc": 74
+      },
+      "params": {
+        "smooth": 0.02
+      }
+    }
+  ],
+  "patches": [
+    {
+      "sourceName": "keys",
+      "destName": "pluck.notes"
+    },
+    {
+      "sourceName": "keys",
+      "destName": "pluck.damping",
+      "depth": 0.6
+    },
+    {
+      "sourceName": "knob",
+      "destName": "verb.gain",
+      "depth": 0.4
+    }
+  ]
+}

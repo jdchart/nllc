@@ -191,9 +191,9 @@
         const outputDeviceId = localStorage.getItem("nllc:audioOutputDeviceId");
 
         const nllc = new Ribbit({ latencyHint });
-        if (outputDeviceId && typeof nllc.audioContext.setSinkId === "function") {
-            nllc.audioContext.setSinkId(outputDeviceId).catch(() => {});
-        }
+        // Through the engine's hardware layer rather than setSinkId
+        // directly, so the new device's channel count is picked up too.
+        if (outputDeviceId) nllc.hardware.setDevice(outputDeviceId).catch(() => {});
 
         // Where output from at=beat/at=cycle work lands once it actually
         // fires — the engine has no other way to reach the console after a
