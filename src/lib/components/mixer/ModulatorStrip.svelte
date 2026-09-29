@@ -13,9 +13,12 @@
     // continuous output, and its bipolar meter would read a flat 0 forever.
     // Render a "fired" flash instead, driven by the AudioContext timestamp
     // recorded on it each time something actually happens (see clock.js's
-    // lastEventTime, which randomgestures sets for itself).
+    // lastEventTime, which randomgestures sets for itself). A modulator that
+    // uses the hook but still publishes a signal (the AE machine's modlfo,
+    // attractor, curveloop — the hook carries beat anchors) says so with
+    // `signalOutput`, and gets the meter.
     const isGenerator = $derived(
-        typeof modulator.generateEvents === "function" || typeof modulator.onSchedule === "function"
+        typeof modulator.generateEvents === "function" || (typeof modulator.onSchedule === "function" && !modulator.signalOutput)
     );
 
     let value = $state(0);

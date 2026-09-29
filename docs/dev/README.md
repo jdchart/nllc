@@ -140,7 +140,9 @@ derived data) as props and call its methods.
   per firing for one that has none. A modulator counts as "flashing" if it
   implements `generateEvents` (a note generator) *or* `onSchedule`
   (`randomgestures`, which sets `lastEventTime` itself); the label reads
-  "notes" or "gestures" accordingly.
+  "notes" or "gestures" accordingly. A modulator that has `onSchedule` but
+  sets `signalOutput` (the AE machine's `modlfo`, `attractor`, `curveloop`,
+  which use the hook only for beat anchors) gets the ordinary meter.
 - `MixerSection.svelte`, `PatchList.svelte`,
   `CollapsedRail.svelte`, `Transport.svelte` — sections, modulator controls, the
   patch list, the collapsed rail, and the transport/save-load bar.

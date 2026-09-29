@@ -1,0 +1,573 @@
+{
+  "version": 1,
+  "readme": [
+    "ae-clusters — one recording, three ways to read it (manual ch. 26-29).",
+    "",
+    "`family0..3` are one `multicluster` each: the same file, sliced at its onsets",
+    "and sorted into four timbre families (darkest first). Every step all four",
+    "draw the same random slice and only its family plays it — so each track is",
+    "that family's mixer strip, with its own rate, pan and sends. `window` is a",
+    "`slicer` on the same file: a looping window relocated by every step (full",
+    "play area), its rate and loop end drawn by two `curveloop` shapes running at",
+    "different speeds. `reader` is a `microsampler` whose micro-loops turn",
+    "velocity into shape.",
+    "",
+    "Try:",
+    "  /start",
+    "  /family0                     the families and how many slices each got",
+    "  /family3 gain=0              take one timbre out; /family3 rate=0.5 to pitch it",
+    "  /family0 clusters=6          re-cluster (every instance should agree)",
+    "  /window dev_slice=0 dev_rate=0   a plain looper; drag start/end",
+    "  /rateshape rnd=now           draw a new rate curve",
+    "  /reader vel_invert=on        loud hits become textures instead of tones",
+    "  /family0 sample=random       a new recording for one family (the others keep theirs)"
+  ],
+  "clock": {
+    "bpm": 124,
+    "loopLengthBeats": 4
+  },
+  "harmony": {
+    "root": 60,
+    "scale": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "master": {
+    "params": {
+      "gain": 1,
+      "pan": 0
+    },
+    "no_random": [
+      "gain"
+    ],
+    "processors": [],
+    "automation": []
+  },
+  "buses": [
+    {
+      "name": "cloud",
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [
+        {
+          "type": "glaze",
+          "name": "glaze",
+          "active": true,
+          "options": {},
+          "params": {
+            "size": 0.07999999821186066,
+            "density": 0.699999988079071,
+            "scatter": 0.4000000059604645,
+            "spray": 0.6000000238418579,
+            "motion": 0.20000000298023224,
+            "octave": 1,
+            "feed": 0.25,
+            "mix": 1
+          },
+          "automation": []
+        }
+      ],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ]
+    },
+    {
+      "name": "dirt",
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [
+        {
+          "type": "drivenet",
+          "name": "drivenet",
+          "active": true,
+          "options": {},
+          "params": {
+            "time": 22,
+            "feedback": 0.550000011920929,
+            "damp": 5000,
+            "drive": 0.5,
+            "cross": 0.5,
+            "noise": 0.05000000074505806,
+            "width": 0.699999988079071,
+            "mix": 1,
+            "out": 0
+          },
+          "automation": []
+        }
+      ],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "family0",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": -0.30000001192092896
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ],
+      "synth": {
+        "type": "multicluster",
+        "options": {
+          "lane": "any",
+          "sieve": "all",
+          "sample": "percs/CLAUDE - glitch16.wav",
+          "folder": "foley",
+          "clusters": 4,
+          "cluster": 0,
+          "seed": 11,
+          "thresh": 0.3
+        },
+        "params": {
+          "rate": 0.5,
+          "attack": 1,
+          "release": 150,
+          "level": 0.8999999761581421
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "family1",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0.3499999940395355
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ],
+      "synth": {
+        "type": "multicluster",
+        "options": {
+          "lane": "any",
+          "sieve": "all",
+          "sample": "percs/CLAUDE - glitch16.wav",
+          "folder": "foley",
+          "clusters": 4,
+          "cluster": 1,
+          "seed": 11,
+          "thresh": 0.3
+        },
+        "params": {
+          "rate": 1,
+          "attack": 1,
+          "release": 150,
+          "level": 0.800000011920929
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "family2",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": -0.6000000238418579
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "cloud",
+          "gain": 0.5
+        }
+      ],
+      "synth": {
+        "type": "multicluster",
+        "options": {
+          "lane": "any",
+          "sieve": "all",
+          "sample": "percs/CLAUDE - glitch16.wav",
+          "folder": "foley",
+          "clusters": 4,
+          "cluster": 2,
+          "seed": 11,
+          "thresh": 0.3
+        },
+        "params": {
+          "rate": 1.5,
+          "attack": 1,
+          "release": 150,
+          "level": 0.6000000238418579
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "family3",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0.699999988079071
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "dirt",
+          "gain": 0.4000000059604645
+        }
+      ],
+      "synth": {
+        "type": "multicluster",
+        "options": {
+          "lane": "any",
+          "sieve": "all",
+          "sample": "percs/CLAUDE - glitch16.wav",
+          "folder": "foley",
+          "clusters": 4,
+          "cluster": 3,
+          "seed": 11,
+          "thresh": 0.3
+        },
+        "params": {
+          "rate": 2,
+          "attack": 1,
+          "release": 150,
+          "level": 0.5
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "window",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "cloud",
+          "gain": 0.30000001192092896
+        }
+      ],
+      "synth": {
+        "type": "slicer",
+        "options": {
+          "lane": "any",
+          "sieve": "all",
+          "sample": "percs/CLAUDE - glitch16.wav",
+          "folder": "foley",
+          "thresh": 0.5,
+          "min_hop": 60,
+          "mod": "on"
+        },
+        "params": {
+          "rate": 1,
+          "start": 0,
+          "end": 0.009999999776482582,
+          "window": 4,
+          "declick": 6,
+          "slice": 0,
+          "dev_slice": 1,
+          "dev_rate": 0.4000000059604645,
+          "dev_end": 0,
+          "dev_window": 0.5,
+          "level": 0.30000001192092896
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "reader",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "dirt",
+          "gain": 0.30000001192092896
+        }
+      ],
+      "synth": {
+        "type": "microsampler",
+        "options": {
+          "lane": "2",
+          "sieve": "all",
+          "sample": "percs/CLAUDE - glitch16.wav",
+          "folder": "foley",
+          "mod": "on",
+          "loop": "off",
+          "vel_invert": "off",
+          "vel_jump": "off"
+        },
+        "params": {
+          "attack": 2,
+          "decay": 200,
+          "start": 0,
+          "loop_start": 0.20000000298023224,
+          "loop_end": 0.30000001192092896,
+          "slices": 32,
+          "chaos": 0.30000001192092896,
+          "loop_min": 4,
+          "loop_max": 180,
+          "level": 0.5
+        },
+        "events": []
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "markovseq",
+      "name": "seq",
+      "options": {
+        "seed": 90,
+        "trig": "5,5,2,5,5,5,2,5,5,2,5,5,5,5,2,5",
+        "note": "40,52,48,45,60,38,55,43,50,48,36,57,41,62,60,47",
+        "vel": "110,70,90,60,100,70,85,65,110,70,90,60,100,75,85,95",
+        "shift": "64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64",
+        "metrics": "1/16,1/16,1/32,1/32,1/16,1/16,1/8t,1/16,1/16,1/32,1/32,1/16,1/16d,1/16,1/32,1/16",
+        "ratchet": "1,1,1,1,2,1,1,1,1,1,1,3,1,1,1,1",
+        "ssize": "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1",
+        "ratprob": "100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100",
+        "swing": "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+        "prob": "100,80,70,90,100,75,85,70,100,80,70,90,100,75,85,70",
+        "micro": "64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64",
+        "matrix": "2|3|4|5,1|6|7|8|9,5|10|11|12|13,9|14|15|16|1,13",
+        "rewrite": "on",
+        "every": 16,
+        "density": 1,
+        "morph": "mutate",
+        "animate": "",
+        "weights": "10,0,51,15,25"
+      },
+      "params": {
+        "inject": 0.25
+      },
+      "automation": []
+    },
+    {
+      "type": "curveloop",
+      "name": "rateshape",
+      "options": {
+        "points": "0,0.5,1,0.5,0,0.25,0.75,0.5",
+        "div": "1",
+        "mult": 4
+      },
+      "params": {
+        "rate": 0.5,
+        "min": -0.800000011920929,
+        "max": 0.800000011920929,
+        "auto": 0,
+        "npoints": 8,
+        "jump": 0.5
+      },
+      "automation": []
+    },
+    {
+      "type": "curveloop",
+      "name": "endshape",
+      "options": {
+        "points": "0,1,0.2,0.8,0.1",
+        "div": "1",
+        "mult": 4
+      },
+      "params": {
+        "rate": 1.25,
+        "min": 0,
+        "max": 0.029999999329447746,
+        "auto": 0,
+        "npoints": 8,
+        "jump": 0.5
+      },
+      "automation": []
+    },
+    {
+      "type": "driftbank",
+      "name": "pandrift",
+      "options": {
+        "kind": "pan",
+        "bus": "",
+        "targets": "family0,family1,family2,family3",
+        "mode": "smooth",
+        "seed": 1
+      },
+      "params": {
+        "rate": 0.5,
+        "jump": 20,
+        "depth": 0.699999988079071
+      },
+      "automation": []
+    }
+  ],
+  "patches": [
+    {
+      "sourceName": "seq",
+      "destName": "family0.notes"
+    },
+    {
+      "sourceName": "seq",
+      "destName": "family1.notes"
+    },
+    {
+      "sourceName": "seq",
+      "destName": "family2.notes"
+    },
+    {
+      "sourceName": "seq",
+      "destName": "family3.notes"
+    },
+    {
+      "sourceName": "seq",
+      "destName": "window.notes"
+    },
+    {
+      "sourceName": "seq",
+      "destName": "reader.notes"
+    },
+    {
+      "sourceName": "rateshape",
+      "destName": "window.rate",
+      "depth": 1
+    },
+    {
+      "sourceName": "endshape",
+      "destName": "window.end",
+      "depth": 1
+    }
+  ],
+  "states": {},
+  "lilypad": {
+    "positions": {
+      "seq": {
+        "x": 0,
+        "y": 0
+      },
+      "rateshape": {
+        "x": 0,
+        "y": 99
+      },
+      "endshape": {
+        "x": 0,
+        "y": 293
+      },
+      "pandrift": {
+        "x": 0,
+        "y": 487
+      },
+      "family0": {
+        "x": 330,
+        "y": 0
+      },
+      "family1": {
+        "x": 330,
+        "y": 254
+      },
+      "family2": {
+        "x": 330,
+        "y": 508
+      },
+      "family3": {
+        "x": 660,
+        "y": 0
+      },
+      "window": {
+        "x": 660,
+        "y": 254
+      },
+      "reader": {
+        "x": 990,
+        "y": 0
+      },
+      "cloud": {
+        "x": 990,
+        "y": 368
+      },
+      "dirt": {
+        "x": 990,
+        "y": 657
+      },
+      "master": {
+        "x": 990,
+        "y": 965
+      }
+    }
+  }
+}

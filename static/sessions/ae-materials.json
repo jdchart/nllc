@@ -1,0 +1,462 @@
+{
+  "version": 1,
+  "readme": [
+    "ae-materials — struck discs solved from physics (Big Modal, manual ch. 30).",
+    "",
+    "Three `bigmodal` objects share lane 6: `drum` (mylar, even notes), `bell`",
+    "(immortal glass, odd notes) and `plate` (anti-wood, notes divisible by 3).",
+    "Each computes its sixteen modes from density, stiffness, radius, thickness",
+    "and tension — `/drum` prints f1, the wave speed and f16/f1. The drum's strike",
+    "point follows velocity; the bell morphs towards glass on a running chaotic",
+    "orbit; an LFO slowly tightens the drum skin; a Lorenz orbit pushed by the",
+    "drum's hits rotates where the plate is struck. Drum and bell also strike",
+    "`atmo`, a Deep Pad tuned to G — one physical model playing another.",
+    "",
+    "Try:",
+    "  /start",
+    "  /drum                        the read-outs: f1 284Hz, c 1696m/s, f16/f1 4.85",
+    "  /drum tension=0 2            a drum becomes a plate",
+    "  /drum radius=40              halve the radius, watch f1 climb",
+    "  /bell mat_b=rubber           morph towards something that doesn't ring",
+    "  /plate mat_a=neutronium      the model gives up — a usable sound",
+    "  /drum preset=kevlar_snare    load another factory object",
+    "  /bell mod_morph=off          latch the bell: every hit a consistent object",
+    "  /drum couple=0.8 grime=0.4 bite=0.7   make it behave like a thing"
+  ],
+  "clock": {
+    "bpm": 96,
+    "loopLengthBeats": 4
+  },
+  "harmony": {
+    "root": 60,
+    "scale": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "master": {
+    "params": {
+      "gain": 1,
+      "pan": 0
+    },
+    "no_random": [
+      "gain"
+    ],
+    "processors": [],
+    "automation": []
+  },
+  "buses": [
+    {
+      "name": "space",
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [
+        {
+          "type": "notverb",
+          "name": "notverb",
+          "active": true,
+          "options": {
+            "freeze": "off"
+          },
+          "params": {
+            "size": 0.699999988079071,
+            "decay": 0.6000000238418579,
+            "damp": 0.4000000059604645,
+            "mix": 1
+          },
+          "automation": []
+        }
+      ],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ]
+    },
+    {
+      "name": "atmo",
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [
+        {
+          "type": "deeppad",
+          "name": "deeppad",
+          "active": true,
+          "options": {},
+          "params": {
+            "pitch": 43,
+            "oct": 0,
+            "descent": 0.20000000298023224,
+            "inharm": 0.6000000238418579,
+            "partials": 0.5,
+            "sub": 0.30000001192092896,
+            "tilt": 0,
+            "spread": 0.30000001192092896,
+            "drift": 0.30000001192092896,
+            "decay": 0.30000001192092896,
+            "erode": 0,
+            "grey": 0.05000000074505806,
+            "wind": 0.05000000074505806,
+            "vinyl": 0,
+            "tone": 0.5,
+            "q": 0.30000001192092896,
+            "space": 0.5,
+            "dist": 0.30000001192092896,
+            "damp": 0.4000000059604645,
+            "excite": 1,
+            "att": 2,
+            "sat": 0.20000000298023224,
+            "hp": 0.10000000149011612,
+            "level": 0.5
+          },
+          "automation": []
+        }
+      ],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "space",
+          "gain": 1
+        }
+      ]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "drum",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "atmo",
+          "gain": 0.5
+        }
+      ],
+      "synth": {
+        "type": "bigmodal",
+        "options": {
+          "lane": "6",
+          "sieve": "even",
+          "mat_a": "mylar",
+          "mat_b": "kevlar",
+          "mod_contact_r": "vel:40",
+          "mod_contact_theta": "off",
+          "mod_tension": "chaos:10",
+          "mod_couple": "off",
+          "mod_grime": "off",
+          "mod_morph": "off",
+          "preset": "mylar_tom"
+        },
+        "params": {
+          "morph": 0,
+          "radius": 140,
+          "thick": 0.20000000298023224,
+          "tension": 3000,
+          "stretch": 1,
+          "damp_tilt": 0.4000000059604645,
+          "contact_r": 0.41999998688697815,
+          "contact_theta": 0,
+          "couple": 0.10000000149011612,
+          "drift": 0.20000000298023224,
+          "grime": 0,
+          "bite": 0.30000001192092896,
+          "grain": 1,
+          "oct": 0,
+          "hit": 1,
+          "mix": 1,
+          "out_db": 0,
+          "rate": 0.10000000149011612,
+          "spread": 1,
+          "wander": 0.05000000074505806
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "bell",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "atmo",
+          "gain": 0.30000001192092896
+        },
+        {
+          "destName": "space",
+          "gain": 0.25
+        }
+      ],
+      "synth": {
+        "type": "bigmodal",
+        "options": {
+          "lane": "6",
+          "sieve": "odd",
+          "mat_a": "immortal_glass",
+          "mat_b": "glass",
+          "mod_contact_r": "chaos:25",
+          "mod_contact_theta": "off",
+          "mod_tension": "off",
+          "mod_couple": "off",
+          "mod_grime": "off",
+          "mod_morph": "chaos:30:run",
+          "preset": "immortal_bell"
+        },
+        "params": {
+          "morph": 0,
+          "radius": 160,
+          "thick": 4,
+          "tension": 0,
+          "stretch": 1,
+          "damp_tilt": 0,
+          "contact_r": 0.8500000238418579,
+          "contact_theta": 0,
+          "couple": 0.10000000149011612,
+          "drift": 0.20000000298023224,
+          "grime": 0,
+          "bite": 0.30000001192092896,
+          "grain": 1,
+          "oct": 0,
+          "hit": 1,
+          "mix": 1,
+          "out_db": -4,
+          "rate": 0.10000000149011612,
+          "spread": 1,
+          "wander": 0.05000000074505806
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "plate",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "space",
+          "gain": 0.30000001192092896
+        }
+      ],
+      "synth": {
+        "type": "bigmodal",
+        "options": {
+          "lane": "6",
+          "sieve": "3:0",
+          "mat_a": "anti_wood",
+          "mat_b": "spruce",
+          "mod_contact_r": "off",
+          "mod_contact_theta": "off",
+          "mod_tension": "off",
+          "mod_couple": "off",
+          "mod_grime": "off",
+          "mod_morph": "off",
+          "preset": "anti_wood_plank"
+        },
+        "params": {
+          "morph": 0,
+          "radius": 150,
+          "thick": 5,
+          "tension": 400,
+          "stretch": 1,
+          "damp_tilt": 0.30000001192092896,
+          "contact_r": 0.5,
+          "contact_theta": 0,
+          "couple": 0.30000001192092896,
+          "drift": 0.20000000298023224,
+          "grime": 0,
+          "bite": 0.30000001192092896,
+          "grain": 1,
+          "oct": 0,
+          "hit": 1,
+          "mix": 1,
+          "out_db": -2,
+          "rate": 0.10000000149011612,
+          "spread": 1,
+          "wander": 0.05000000074505806
+        },
+        "events": []
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "markovseq",
+      "name": "seq",
+      "options": {
+        "seed": 7,
+        "trig": "6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6",
+        "note": "36,37,38,36,39,40,36,41,42,37,36,44,45,36,47,39",
+        "vel": "120,80,100,70,110,60,90,75,115,85,70,95,105,60,100,80",
+        "shift": "64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64",
+        "metrics": "1/16,1/16,1/8,1/16,1/16,1/16d,1/16,1/32,1/16,1/8t,1/16,1/16,1/8,1/16,1/32,1/16",
+        "ratchet": "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1",
+        "ssize": "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1",
+        "ratprob": "100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100",
+        "swing": "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+        "prob": "100,80,90,70,100,60,85,75,100,80,70,90,100,65,85,75",
+        "micro": "64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64",
+        "matrix": "2|3|1,4|5|6|4,7|8|9|7,10|11|12|10,13|14|15|13,16|1",
+        "rewrite": "on",
+        "every": 32,
+        "density": 1,
+        "morph": "mutate",
+        "animate": "",
+        "weights": "10,0,51,15,25"
+      },
+      "params": {
+        "inject": 0.25
+      },
+      "automation": []
+    },
+    {
+      "type": "modlfo",
+      "name": "skin",
+      "options": {
+        "shape": "drift",
+        "sync": "on",
+        "div": "4bar",
+        "strike": ""
+      },
+      "params": {
+        "hz": 0.5
+      },
+      "automation": []
+    },
+    {
+      "type": "attractor",
+      "name": "orbit",
+      "options": {
+        "system": "lorenz",
+        "axis": "x",
+        "strike": "drum"
+      },
+      "params": {
+        "rate": 0.07999999821186066,
+        "wander": 0
+      },
+      "automation": []
+    }
+  ],
+  "patches": [
+    {
+      "sourceName": "seq",
+      "destName": "drum.notes"
+    },
+    {
+      "sourceName": "seq",
+      "destName": "bell.notes"
+    },
+    {
+      "sourceName": "seq",
+      "destName": "plate.notes"
+    },
+    {
+      "sourceName": "skin",
+      "destName": "drum.tension",
+      "depth": 1500
+    },
+    {
+      "sourceName": "orbit",
+      "destName": "plate.contact_theta",
+      "depth": 120
+    }
+  ],
+  "states": {},
+  "lilypad": {
+    "positions": {
+      "seq": {
+        "x": 0,
+        "y": 0
+      },
+      "skin": {
+        "x": 0,
+        "y": 99
+      },
+      "orbit": {
+        "x": 0,
+        "y": 198
+      },
+      "drum": {
+        "x": 330,
+        "y": 0
+      },
+      "bell": {
+        "x": 330,
+        "y": 558
+      },
+      "plate": {
+        "x": 660,
+        "y": 0
+      },
+      "atmo": {
+        "x": 990,
+        "y": 0
+      },
+      "space": {
+        "x": 990,
+        "y": 593
+      },
+      "master": {
+        "x": 990,
+        "y": 806
+      }
+    }
+  }
+}

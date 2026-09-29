@@ -29,7 +29,9 @@ audio-options panel.
   panel (see below).
 - **`/code-editor`** — a **blank session**: nothing but the master channel.
 - **`/code-editor/<name>`** — the same page, auto-loading
-  `static/sessions/<name>.json` on open. Twelve ship:
+  `static/sessions/<name>.json` on open. These ship (the list isn't
+  exhaustive — `pianoroll-shared` and `sample-picking` are covered in lilypad's
+  README):
   - **`demo`** — the starter session, and a combination of `euclid-ghosts` and
     `ambient-tape`: a generated drum kit (euclidean grid plus Markov ghosts)
     under two `tapepad` layers, with one hand-authored `lead` track. Framed as
@@ -72,7 +74,16 @@ audio-options panel.
     track, a `goodenizer` on master, and an LFO patched into its compressor's
     threshold for a pumping mix.
 
-  Every session runs a `goodenizer` on master named `glue` — `/glue` reports
+  - **`ae-machine`**, **`ae-sieve`**, **`ae-materials`**, **`ae-landscape`**,
+    **`ae-clusters`**, **`ae-dark`** — Emiliano Pennisi's AE Machine rebuilt in
+    ribbit: the whole machine, four focused tours (how notes choose
+    instruments, the physical-model discs, the drumless landscape with a
+    disintegrating tape loop, one recording read three ways), and a sparse,
+    dark patch generated from one seed. The guide is
+    `ribbit/docs/user/ae-machine.md`. They carry lilypad layouts and play the
+    same here; the sequencer's grid editor is lilypad's.
+
+  Every session before the AE ones runs a `goodenizer` on master named `glue` — `/glue` reports
   what it's doing and `/glue mix=0` takes it off.
 
   Each prints a short readme in the console when it opens, saying what it is

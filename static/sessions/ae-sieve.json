@@ -1,0 +1,609 @@
+{
+  "version": 1,
+  "readme": [
+    "ae-sieve — how a note finds its voice (AE Machine, manual ch. 14).",
+    "",
+    "Eight AE voices hear every note of `seq`; each plays only the notes that pass",
+    "its sieve: fm note%4=0, modal %3=1, drone %4=2, hats %4=3, sub %5=4, string",
+    "%6=5, metal %8=1, crack %7=3. Because the divisors are 3..8 the pattern of who",
+    "answers repeats only after 840 notes. Learn five notes: 36 fm alone, 37 modal",
+    "alone, 42 drone alone, 45 crack alone, 59 hats+sub+string+crack.",
+    "",
+    "Watch the lamps (lilypad) or `lastEventTime`: a voice that declines a note",
+    "doesn't light.",
+    "",
+    "Try:",
+    "  /start",
+    "  /seq note=37,64,38,46,40,64,43,60,37,64,58,46,54,64,38,65   every note +1: a new kit",
+    "  /seq note=36                     one note on every step: FM alone",
+    "  /seq note=59                     four instruments at once",
+    "  /hats sieve=all                  the hats answer everything",
+    "  /crack sieve=4:1                 give the crack a different share",
+    "  /seq shape=wide                  same notes, a different walk",
+    "  /seq metrics=1/16,1/16,1/32,1/32,1/8t    irregular steps",
+    "  /harmony tuning=bohlen_pierce    the quant voices (modal, drone, string) retune"
+  ],
+  "clock": {
+    "bpm": 112,
+    "loopLengthBeats": 4
+  },
+  "harmony": {
+    "root": 48,
+    "scale": [
+      0,
+      2,
+      3,
+      5,
+      7,
+      8,
+      10
+    ]
+  },
+  "master": {
+    "params": {
+      "gain": 1,
+      "pan": 0
+    },
+    "no_random": [
+      "gain"
+    ],
+    "processors": [],
+    "automation": []
+  },
+  "buses": [
+    {
+      "name": "space",
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [
+        {
+          "type": "notverb",
+          "name": "notverb",
+          "active": true,
+          "options": {
+            "freeze": "off"
+          },
+          "params": {
+            "size": 0.5,
+            "decay": 0.44999998807907104,
+            "damp": 0.4000000059604645,
+            "mix": 1
+          },
+          "automation": []
+        }
+      ],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ]
+    },
+    {
+      "name": "echo",
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [
+        {
+          "type": "cascade",
+          "name": "cascade",
+          "active": true,
+          "options": {},
+          "params": {
+            "time": 0.4000000059604645,
+            "shift": 7,
+            "feedback": 0.5,
+            "win": 0.05999999865889549,
+            "damp": 0.30000001192092896,
+            "xfb": 0.20000000298023224,
+            "spread": 0.20000000298023224,
+            "reson": 0,
+            "rfreq": 1200,
+            "drive": 0.10000000149011612,
+            "morph": 0.10000000149011612,
+            "mix": 1
+          },
+          "automation": []
+        }
+      ],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ]
+    }
+  ],
+  "tracks": [
+    {
+      "name": "fm",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "echo",
+          "gain": 0.20000000298023224
+        }
+      ],
+      "synth": {
+        "type": "fmperc",
+        "options": {
+          "lane": "5",
+          "sieve": "4:0",
+          "quant": "off"
+        },
+        "params": {
+          "harm": 2,
+          "index": 5,
+          "a_dec": 180,
+          "i_dec": 40,
+          "curve": -0.6000000238418579,
+          "drive": 0,
+          "fold": 0,
+          "down": 0,
+          "pitch": 60,
+          "keytrk": 1,
+          "n_tmbr": 0.30000001192092896,
+          "level": 0.6000000238418579
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "modal",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "space",
+          "gain": 0.30000001192092896
+        }
+      ],
+      "synth": {
+        "type": "modal",
+        "options": {
+          "lane": "5",
+          "sieve": "3:1",
+          "quant": "on"
+        },
+        "params": {
+          "material": 0,
+          "inharm": 0,
+          "disp": 0,
+          "decay": 0.30000001192092896,
+          "damp": 0.6000000238418579,
+          "bright": 0.30000001192092896,
+          "pitch": 48,
+          "keytrk": 1,
+          "n_tmbr": 0.30000001192092896,
+          "drive": 0,
+          "fold": 0,
+          "level": 0.699999988079071
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "drone",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ],
+      "synth": {
+        "type": "drone",
+        "options": {
+          "lane": "5",
+          "sieve": "4:2",
+          "quant": "on",
+          "hold": "off"
+        },
+        "params": {
+          "trig": 80,
+          "rebirth": 10,
+          "pitch": 36,
+          "detune": 0.3499999940395355,
+          "wave": 0.20000000298023224,
+          "fmode": 0,
+          "cutoff": 0.4000000059604645,
+          "res": 0.3499999940395355,
+          "lfo_rt": 0.30000001192092896,
+          "lfo_dp": 0.20000000298023224,
+          "comb": 0,
+          "compand": 0.30000001192092896,
+          "att": 0.4000000059604645,
+          "rel": 0.5,
+          "oct": 0,
+          "drive": 0.10000000149011612,
+          "level": 0.30000001192092896
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "hats",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ],
+      "synth": {
+        "type": "noisehat",
+        "options": {
+          "lane": "5",
+          "sieve": "4:3"
+        },
+        "params": {
+          "low": 900,
+          "hi1": 7000,
+          "hi2": 11000,
+          "lowq": 0.800000011920929,
+          "hiq": 0.8999999761581421,
+          "mix": 0.800000011920929,
+          "decay": 25,
+          "curve": -0.6000000238418579,
+          "level": 0.6000000238418579
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "sub",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ],
+      "synth": {
+        "type": "subdrum",
+        "options": {
+          "lane": "5",
+          "sieve": "5:4"
+        },
+        "params": {
+          "pitch": 33,
+          "chirp": 0.5,
+          "chtime": 20,
+          "attack": 1,
+          "decay": 350,
+          "click": 0.30000001192092896,
+          "cfreq": 2500,
+          "cdecay": 18,
+          "spike": 0.10000000149011612,
+          "sfreq": 9000,
+          "sdecay": 20,
+          "drive": 1.5,
+          "cut": 2500,
+          "width": 0,
+          "level": 0.800000011920929
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "string",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "echo",
+          "gain": 0.30000001192092896
+        }
+      ],
+      "synth": {
+        "type": "twostring",
+        "options": {
+          "lane": "5",
+          "sieve": "6:5",
+          "quant": "on"
+        },
+        "params": {
+          "pitch": 48,
+          "bright": 0.4000000059604645,
+          "decay": 0.5,
+          "pick": 0.25,
+          "stiff": 0.10000000149011612,
+          "tension": 0.10000000149011612,
+          "couple": 0,
+          "scatter": 0,
+          "drive": 0,
+          "keytrk": 1,
+          "n_tmbr": 0.30000001192092896,
+          "level": 0.699999988079071
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "metal",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        }
+      ],
+      "synth": {
+        "type": "metalbass",
+        "options": {
+          "lane": "5",
+          "sieve": "8:1",
+          "quant": "off"
+        },
+        "params": {
+          "pitch": 33,
+          "material": 0.5,
+          "stretch": 0.20000000298023224,
+          "sub_dcy": 0.5,
+          "met_dcy": 0.4000000059604645,
+          "drop": 0.30000001192092896,
+          "comb": 0.30000001192092896,
+          "formant": 0.4000000059604645,
+          "rm_mix": 0,
+          "drive": 0.20000000298023224,
+          "width": 0.4000000059604645,
+          "d_time": 0.3499999940395355,
+          "d_fb": 0.3499999940395355,
+          "d_sprd": 0.5,
+          "d_wet": 0.20000000298023224,
+          "level": 0.75
+        },
+        "events": []
+      }
+    },
+    {
+      "name": "crack",
+      "active": true,
+      "params": {
+        "gain": 1,
+        "pan": 0
+      },
+      "no_random": [
+        "gain"
+      ],
+      "processors": [],
+      "automation": [],
+      "sends": [
+        {
+          "destName": "master",
+          "gain": 1
+        },
+        {
+          "destName": "space",
+          "gain": 0.3499999940395355
+        }
+      ],
+      "synth": {
+        "type": "crack",
+        "options": {
+          "lane": "5",
+          "sieve": "7:3",
+          "quant": "off"
+        },
+        "params": {
+          "cracks": 1,
+          "spread": 0.5,
+          "nse_dcy": 0.4000000059604645,
+          "tone": 0.44999998807907104,
+          "q": 0.30000001192092896,
+          "body": 0,
+          "pitch": 55,
+          "bdy_dcy": 0.3499999940395355,
+          "rattle": 0.20000000298023224,
+          "width": 0.4000000059604645,
+          "drive": 0.10000000149011612,
+          "level": 0.699999988079071
+        },
+        "events": []
+      }
+    }
+  ],
+  "modulators": [
+    {
+      "type": "markovseq",
+      "name": "seq",
+      "options": {
+        "seed": 36,
+        "trig": "5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5",
+        "note": "36,63,37,45,39,63,42,59,36,63,57,45,53,63,37,64",
+        "vel": "120,60,100,90,105,55,95,110,115,60,100,90,100,55,95,105",
+        "shift": "64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64",
+        "metrics": "1/16,1/16,1/16,1/16,1/16,1/16,1/16,1/16,1/16,1/16,1/16,1/16,1/16,1/16,1/16,1/16",
+        "ratchet": "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1",
+        "ssize": "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1",
+        "ratprob": "100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100",
+        "swing": "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+        "prob": "100,70,100,85,100,70,90,100,100,70,100,85,90,70,90,100",
+        "micro": "64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64",
+        "matrix": "2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|1",
+        "rewrite": "off",
+        "every": 32,
+        "density": 1,
+        "morph": "mutate",
+        "animate": "",
+        "weights": "10,0,51,15,25"
+      },
+      "params": {
+        "inject": 0.25
+      },
+      "automation": []
+    }
+  ],
+  "patches": [
+    {
+      "sourceName": "seq",
+      "destName": "fm.notes"
+    },
+    {
+      "sourceName": "seq",
+      "destName": "modal.notes"
+    },
+    {
+      "sourceName": "seq",
+      "destName": "drone.notes"
+    },
+    {
+      "sourceName": "seq",
+      "destName": "hats.notes"
+    },
+    {
+      "sourceName": "seq",
+      "destName": "sub.notes"
+    },
+    {
+      "sourceName": "seq",
+      "destName": "string.notes"
+    },
+    {
+      "sourceName": "seq",
+      "destName": "metal.notes"
+    },
+    {
+      "sourceName": "seq",
+      "destName": "crack.notes"
+    }
+  ],
+  "states": {},
+  "lilypad": {
+    "positions": {
+      "seq": {
+        "x": 0,
+        "y": 0
+      },
+      "fm": {
+        "x": 330,
+        "y": 0
+      },
+      "modal": {
+        "x": 330,
+        "y": 406
+      },
+      "drone": {
+        "x": 330,
+        "y": 812
+      },
+      "hats": {
+        "x": 660,
+        "y": 0
+      },
+      "sub": {
+        "x": 660,
+        "y": 349
+      },
+      "string": {
+        "x": 660,
+        "y": 812
+      },
+      "metal": {
+        "x": 990,
+        "y": 0
+      },
+      "crack": {
+        "x": 990,
+        "y": 482
+      },
+      "space": {
+        "x": 1320,
+        "y": 0
+      },
+      "echo": {
+        "x": 1320,
+        "y": 213
+      },
+      "master": {
+        "x": 1320,
+        "y": 578
+      }
+    }
+  }
+}
